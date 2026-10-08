@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1
+# Dedicated apcompile Service Container for F5 WAF for NGINX
+# Based on official F5 NGINX compiler image
+# Requires valid NGINX repo certificate and key to pull base image from private-registry.nginx.com
+
+ARG BASE_IMAGE=private-registry.nginx.com/nap/waf-compiler:latest
+FROM ${BASE_IMAGE} AS runner
+
+# Install packages as root
+USER root
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Update system repositories using secret mounts for NGINX certificate and key,
+# configure official NGINX security updates repository, and install security updates
+RUN --mount=type=secret,id=nginx-crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \
+    --mount=type=secret,id=nginx-key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644 \
+    set -x \
+    && apt-get update \
+    && apt-get install --no-install-recommends --no-install-suggests -y \
+       apt-transport-https \
+       lsb-release \
+       ca-certificates \
+       wget \
+       curl \
+       gnupg2 \
+       ubuntu-keyring \
+       python3 \
+       python3-pip \
+       python3-venv \
+    && wget -qO - https://cs.nginx.com/static/keys/app-protect-security-updates.key | gpg --dearmor | \
+       tee /usr/share/keyrings/app-protect-security-updates.gpg >/dev/null \
+    && printf "deb [signed-by=/usr/share/keyrings/app-protect-security-updates.gpg] https://pkgs.nginx.com/app-protect-security-updates/ubuntu `lsb_release -cs` nginx-plus\n" | \
+       tee /etc/apt/sources.list.d/nginx-app-protect.list \
+    && wget -P /etc/apt/apt.conf.d https://cs.nginx.com/static/files/90pkgs-nginx \
+    && sed -i 's/pkgs.nginx.com/pkgs.nginx.com/g' /etc/apt/apt.conf.d/90pkgs-nginx \
+    && apt-get update \
+    && (apt-get install --no-install-recommends --no-install-suggests -y \
+       app-protect-attack-signatures \
+       app-protect-bot-signatures \
+       app-protect-threat-campaigns || true) \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Create virtualenv and install dependencies
+COPY requirements.txt pyproject.toml ./
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application modules
+COPY f5_waf_editor ./f5_waf_editor
+
+# Ensure ownership and set non-root user
+RUN chown -R nginx:nginx /app /opt/venv
+
+USER nginx
+
+ENV PYTHONUNBUFFERED=1 \
+    COMPILER_PORT=9000 \
+    WAF_COMPILER_BIN=/opt/app_protect/bin/apcompile
+
+EXPOSE 9000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')" || exit 1
+
+ENTRYPOINT ["python3", "-m", "f5_waf_editor.compiler.server", "--host", "0.0.0.0", "--port", "9000"]

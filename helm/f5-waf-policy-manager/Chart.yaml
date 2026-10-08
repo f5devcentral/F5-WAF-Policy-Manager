@@ -1,0 +1,22 @@
+apiVersion: v2
+name: f5-waf-policy-manager
+description: Production-grade Helm chart for F5 WAF for NGINX Policy & Logging Profile Manager
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - f5
+  - waf
+  - nginx
+  - app-protect
+  - security
+  - logging
+  - declarative-policy
+maintainers:
+  - name: F5 DevSecOps Team
+home: https://github.com/your-org/f5-waf-policy-manager
+sources:
+  - https://docs.nginx.com/waf/policies/configuration/
+  - https://docs.nginx.com/waf/logging/logs-overview/
+  - https://docs.nginx.com/waf/policies/grpc-protection/
+  - https://docs.nginx.com/waf/policies/external-references/

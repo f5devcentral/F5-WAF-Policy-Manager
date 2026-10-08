@@ -1,0 +1,57 @@
+{
+  "policy": {
+    "name": "grpc_security_policy",
+    "description": "F5 WAF for NGINX policy with gRPC profile and protobuf schema validation",
+    "template": {
+      "name": "POLICY_TEMPLATE_NGINX_BASE"
+    },
+    "applicationLanguage": "utf-8",
+    "enforcementMode": "blocking",
+    "blocking-settings": {
+      "violations": [
+        {
+          "name": "VIOL_GRPC_MALFORMED",
+          "alarm": true,
+          "block": true
+        },
+        {
+          "name": "VIOL_GRPC_FORMAT",
+          "alarm": true,
+          "block": true
+        },
+        {
+          "name": "VIOL_GRPC_METHOD",
+          "alarm": true,
+          "block": true
+        },
+        {
+          "name": "VIOL_METHOD",
+          "alarm": true,
+          "block": true
+        }
+      ]
+    },
+    "grpc-profiles": [
+      {
+        "name": "example_grpc_service_profile",
+        "description": "gRPC protection profile for Example gRPC service with protobuf schema enforcement",
+        "associateUrls": true,
+        "attackSignaturesCheck": true,
+        "metacharCheck": true,
+        "decodeStringValuesAsBase64": "disabled",
+        "defenseAttributes": {
+          "maximumDataLength": 100000,
+          "allowUnknownFields": false
+        },
+        "idlFiles": [
+          {
+            "idlFile": {
+              "$ref": "file:///etc/app_protect/conf/grpc/example_grpc_service.tgz"
+            },
+            "primaryIdlFileName": "example_grpc_service.proto"
+          }
+        ]
+      }
+    ]
+  }
+}

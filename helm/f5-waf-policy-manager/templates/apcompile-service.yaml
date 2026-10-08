@@ -1,0 +1,17 @@
+{{- if .Values.apcompile.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "f5-waf-policy-manager.apcompileFullname" . }}
+  labels:
+    {{- include "f5-waf-policy-manager.apcompileLabels" . | nindent 4 }}
+spec:
+  type: {{ .Values.apcompile.service.type }}
+  ports:
+    - port: {{ .Values.apcompile.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "f5-waf-policy-manager.apcompileSelectorLabels" . | nindent 4 }}
+{{- end }}

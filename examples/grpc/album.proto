@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package album.v1;
+
+option go_package = "example.com/album/v1;albumv1";
+
+service AlbumService {
+  rpc GetAlbum (GetAlbumRequest) returns (Album);
+  rpc ListAlbums (ListAlbumsRequest) returns (ListAlbumsResponse);
+  rpc CreateAlbum (CreateAlbumRequest) returns (Album);
+}
+
+message Album {
+  string id = 1;
+  string title = 2;
+  string artist = 3;
+  double price = 4;
+}
+
+message GetAlbumRequest {
+  string id = 1;
+}
+
+message ListAlbumsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListAlbumsResponse {
+  repeated Album albums = 1;
+  string next_page_token = 2;
+}
+
+message CreateAlbumRequest {
+  string title = 1;
+  string artist = 2;
+  double price = 3;
+}

@@ -1,0 +1,10 @@
+{
+  "filter": {
+    "request_type": "illegal"
+  },
+  "content": {
+    "format": "arcsight",
+    "max_request_size": "2k",
+    "max_message_size": "32k"
+  }
+}

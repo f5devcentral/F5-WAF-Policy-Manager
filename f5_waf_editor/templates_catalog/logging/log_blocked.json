@@ -1,0 +1,10 @@
+{
+  "filter": {
+    "request_type": "blocked"
+  },
+  "content": {
+    "format": "default",
+    "max_request_size": "2k",
+    "max_message_size": "32k"
+  }
+}

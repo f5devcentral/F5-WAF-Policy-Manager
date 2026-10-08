@@ -1,0 +1,140 @@
+services:
+  waf-editor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: f5-waf-policy-manager:latest
+    container_name: f5-waf-policy-manager
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-redis}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_KEY_PREFIX=${REDIS_KEY_PREFIX:-}
+      - GITHUB_OWNER=${GITHUB_OWNER:-}
+      - GITHUB_REPO=${GITHUB_REPO:-}
+      - GITHUB_TOKEN=${GITHUB_PAT:-${GITHUB_TOKEN:-}}
+      - GITHUB_BRANCH=${GITHUB_BRANCH:-main}
+      - GITHUB_API_URL=${GITHUB_API_URL:-https://api.github.com}
+      - GITHUB_POLICIES_PATH=${GITHUB_POLICIES_PATH:-policies}
+      - GITHUB_LOG_PROFILES_PATH=${GITHUB_LOG_PROFILES_PATH:-log-profiles}
+      - GITHUB_CUSTOM_SIGS_PATH=${GITHUB_CUSTOM_SIGS_PATH:-custom-signatures}
+      - ENABLE_MEMORY_FALLBACK=true
+      - COMPILER_SERVICE_URL=http://apcompile:9000
+    volumes:
+      - ./f5_waf_editor:/app/f5_waf_editor
+    depends_on:
+      redis:
+        condition: service_healthy
+      apcompile:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/redis/status')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    init: true
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1536M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    restart: unless-stopped
+    networks:
+      - waf-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  apcompile:
+    build:
+      context: .
+      dockerfile: Dockerfile.compiler
+      args:
+        BASE_IMAGE: ${WAF_COMPILER_IMAGE:-private-registry.nginx.com/nap/waf-compiler:latest}
+      secrets:
+        - nginx-crt
+        - nginx-key
+    image: f5-waf-apcompile:latest
+    container_name: f5-waf-apcompile
+    ports:
+      - "${COMPILER_PORT:-9000}:9000"
+    environment:
+      - COMPILER_PORT=9000
+      - WAF_COMPILER_BIN=/opt/app_protect/bin/apcompile
+    volumes:
+      - ./f5_waf_editor:/app/f5_waf_editor
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    init: true
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    restart: unless-stopped
+    networks:
+      - waf-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: f5-waf-redis
+    ports:
+      - "${REDIS_EXPOSE_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - waf-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  waf-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    name: f5-waf-redis-data
+    driver: local
+
+secrets:
+  nginx-crt:
+    file: ${NGINX_CERT:-/etc/ssl/nginx/nginx-repo.crt}
+  nginx-key:
+    file: ${NGINX_KEY:-/etc/ssl/nginx/nginx-repo.key}
+

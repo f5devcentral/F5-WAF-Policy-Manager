@@ -1,0 +1,16 @@
+{
+  "policy": {
+    "name": "app_protect_default_policy",
+    "description": "Baseline F5 WAF default security policy providing OWASP Top 10 and Bot protection.",
+    "template": {
+      "name": "POLICY_TEMPLATE_NGINX_BASE"
+    },
+    "applicationLanguage": "utf-8",
+    "enforcementMode": "blocking",
+    "bot-defense": {
+      "settings": {
+        "isEnabled": true
+      }
+    }
+  }
+}

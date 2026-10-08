@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package album.v1;
+
+import "common/types.proto";
+
+service AlbumService {
+  rpc GetAlbum (GetAlbumRequest) returns (Album);
+  rpc ListAlbums (ListAlbumsRequest) returns (ListAlbumsResponse);
+}
+
+message Album {
+  string id = 1;
+  string title = 2;
+  string artist = 3;
+  common.v1.AuditMeta meta = 4;
+}
+
+message GetAlbumRequest {
+  string id = 1;
+}
+
+message ListAlbumsRequest {
+  int32 page_size = 1;
+}
+
+message ListAlbumsResponse {
+  repeated Album albums = 1;
+}

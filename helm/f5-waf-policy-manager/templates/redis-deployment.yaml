@@ -1,0 +1,83 @@
+{{- if .Values.redis.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "f5-waf-policy-manager.redisFullname" . }}
+  labels:
+    {{- include "f5-waf-policy-manager.redisLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "f5-waf-policy-manager.redisSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "f5-waf-policy-manager.redisLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          command:
+            - "redis-server"
+            - "--appendonly"
+            - "yes"
+            {{- if .Values.redis.password }}
+            - "--requirepass"
+            - "$(REDIS_PASSWORD)"
+            {{- end }}
+          {{- if .Values.redis.password }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "f5-waf-policy-manager.fullname" . }}
+                  key: redis-password
+          {{- end }}
+          ports:
+            - name: redis
+              containerPort: {{ .Values.redis.service.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                {{- if .Values.redis.password }}
+                - "redis-cli -a \"$REDIS_PASSWORD\" ping | grep PONG"
+                {{- else }}
+                - "redis-cli ping | grep PONG"
+                {{- end }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                {{- if .Values.redis.password }}
+                - "redis-cli -a \"$REDIS_PASSWORD\" ping | grep PONG"
+                {{- else }}
+                - "redis-cli ping | grep PONG"
+                {{- end }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          {{- if .Values.redis.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "f5-waf-policy-manager.redisFullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

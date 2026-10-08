@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package common.v1;
+
+message AuditMeta {
+  string created_by = 1;
+  int64 timestamp = 2;
+}

@@ -1,0 +1,14 @@
+{
+  "filter": {
+    "request_type": "illegal"
+  },
+  "content": {
+    "format": "user-defined",
+    "format_string": "timestamp=\"%date_time%\",client_ip=\"%ip_client%\",src_port=\"%src_port%\",policy=\"%policy_name%\",status=\"%request_status%\",method=\"%method%\",uri=\"%uri%\",violations=\"%violations%\",sig_names=\"%sig_names%\",rating=\"%violation_rating%\",support_id=\"%support_id%\"",
+    "max_request_size": "2k",
+    "max_message_size": "32k",
+    "list_prefix": "[",
+    "list_delimiter": ",",
+    "list_suffix": "]"
+  }
+}
