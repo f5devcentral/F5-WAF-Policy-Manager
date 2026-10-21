@@ -33,7 +33,7 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 | **Logging Profiles** | [![Logging Profiles](docs/screenshots/03_logging_profiles_dashboard.png)](docs/walkthrough.md#3-logging-profiles-management--siem-formats) | Fleet-wide logging configuration with built-in presets for Splunk, ArcSight CEF, gRPC, and custom key-value formats. |
 | **Compiler Tester (`apcompile`)** | [![Compiler Tester](docs/screenshots/04_compiler_tester_modal.png)](docs/walkthrough.md#4-official-policy-compilation--bundle-verification-apcompile) | Real-time bundle validation and binary `.tgz` generation running the official F5 WAF compiler engine with diagnostic logging. |
 | **GitOps Version Control** | [![GitOps Commit](docs/screenshots/05_github_commit_push_modal.png)](docs/walkthrough.md#5-gitops-synchronization-conflict-resolution--verbose-commits) | Direct GitHub push with automated diff change summarization, conflict resolution on pull, and branch management. |
-| **ClickHouse Violation Logs & Tuning** | [Violations Tuning](docs/screenshots/06_policy_tuning.png) | Search across all 53 columns of `v4_security_events`, correlate 3 NIM ClickHouse tables by `support_id`, and enable/disable `signature_id` in policies. |
+| **ClickHouse Violation Logs & Tuning** | [![Violations Tuning](docs/screenshots/06_policy_tuning.png)](docs/walkthrough.md#6-clickhouse-security-log-violations--waf-policy-fine-tuning) | Search across all 53 columns of `v4_security_events`, correlate 3 NIM ClickHouse tables by `support_id`, and enable/disable `signature_id` in policies. |
 
 👉 **[Read the Full Visual Walkthrough Guide with Detailed Step-by-Step Instructions →](docs/walkthrough.md)**
 
