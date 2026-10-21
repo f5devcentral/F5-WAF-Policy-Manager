@@ -592,6 +592,105 @@ document.addEventListener("alpine:init", () => {
     logToDelete: null,
 
     // -------------------------------------------------------------
+    // CLICKHOUSE VIOLATION LOGS & POLICY FINE-TUNING STATE
+    // -------------------------------------------------------------
+    showClickHouseModal: false,
+    chLoading: false,
+    chTesting: false,
+    chSaving: false,
+    chTuningInProgress: false,
+    chError: null,
+    chTestResult: null,
+    chStatus: {
+      connected: false,
+      configured: false,
+      persisted_in_redis: false,
+      database: "nms",
+      config: {
+        host: "",
+        port: 8123,
+        username: "default",
+        database: "nms",
+        ssl: false,
+        verify_ssl: true,
+        has_password: false,
+        persisted_in_redis: false,
+      },
+    },
+    chConfigForm: {
+      host: "",
+      port: 8123,
+      username: "default",
+      password: "",
+      database: "nms",
+      ssl: false,
+      verify_ssl: true,
+    },
+    chSchemaEventsColumns: [],
+    chSchemaViolationColumns: [],
+    chSchemaSignaturesColumns: [],
+    chFilterOperators: [
+      { id: "contains", label: "Contains (case-insensitive)" },
+      { id: "equals", label: "Equals (=)" },
+      { id: "not_equals", label: "Does not equal (!=)" },
+      { id: "not_contains", label: "Does not contain" },
+      { id: "starts_with", label: "Starts with" },
+      { id: "ends_with", label: "Ends with" },
+      { id: "in", label: "In comma-separated list" },
+      { id: "gt", label: "Greater than (>)" },
+      { id: "gte", label: "Greater than or equal (>=)" },
+      { id: "lt", label: "Less than (<)" },
+      { id: "lte", label: "Less than or equal (<=)" },
+      { id: "is_empty", label: "Is empty or N/A" },
+      { id: "is_not_empty", label: "Is not empty and not N/A" },
+    ],
+    chGlobalSearch: "",
+    chQuickFilters: {
+      support_id: "",
+      policy_name: "",
+      request_status: "",
+      severity: "",
+      http__request_method: "",
+      http__uri: "",
+      http__remote_addr: "",
+      signature_ids: "",
+      violations: "",
+    },
+    chFieldFilters: [],
+    chShowColumnPicker: false,
+    chVisibleColumns: [
+      "timestamp",
+      "support_id",
+      "request_status",
+      "severity",
+      "policy_name",
+      "http__request_method",
+      "http__uri",
+      "http__remote_addr",
+      "violation_rating",
+      "signature_ids",
+      "signature_names",
+      "violations",
+      "bot_signature_name",
+    ],
+    chSortBy: "timestamp",
+    chSortOrder: "DESC",
+    chLimit: 50,
+    chOffset: 0,
+    chTotalEvents: 0,
+    chEvents: [],
+    chSelectedSupportId: null,
+    chCorrelatedData: null,
+    chCorrelationTab: "signatures",
+    chTargetPolicy: "",
+    chInspectorLogPolicyName: "",
+    chUnsavedTuningCount: 0,
+    chSavingPolicyToRedis: false,
+    chPolicySavedToRedis: false,
+    chLastSavedPolicyName: "",
+    configActiveTab: "all",
+
+    // -------------------------------------------------------------
     // LIFECYCLE
     // -------------------------------------------------------------
     async init() {
@@ -630,6 +729,8 @@ document.addEventListener("alpine:init", () => {
       await this.loadLogProfiles();
       await this.loadCustomSignaturesCatalog();
       await this.loadCustomSignatureFiles();
+      await this.loadClickHouseSchema();
+      await this.loadClickHouseStatus(false);
 
       // Poll Redis health periodically
       setInterval(() => this.checkRedisHealth(false), 15000);
@@ -660,12 +761,55 @@ document.addEventListener("alpine:init", () => {
     },
 
     // --- Navigation Switcher ---
-    switchSection(section) {
+    async switchSection(section, subTarget = null) {
       this.activeSection = section;
       if (section === "waf") {
         this.loadPolicies();
       } else if (section === "logging") {
         this.loadLogProfiles();
+      } else if (section === "violations") {
+        await this.loadPolicies();
+        if (!this.chTargetPolicy && this.policies.length > 0) {
+          this.chTargetPolicy = this.policies[0].name;
+        }
+        await this.loadClickHouseStatus(true);
+        if (this.chStatus.configured && this.chStatus.connected && this.chEvents.length === 0) {
+          await this.searchClickHouseEvents(true);
+        }
+      } else if (section === "configuration") {
+        if (subTarget && ["github", "redis", "memory"].includes(subTarget)) {
+          this.storageBackendTab = subTarget;
+        }
+        await this.checkStorageHealth(true);
+        await this.loadClickHouseStatus(true);
+        const cfg = this.chConfig || this.chStatus.config || {};
+        this.chConfigForm = {
+          host: cfg.host || this.chConfigForm.host || "",
+          port: cfg.port || this.chConfigForm.port || 8123,
+          username: cfg.username || this.chConfigForm.username || "default",
+          password: this.chConfigForm.password || "",
+          database: cfg.database || this.chConfigForm.database || "nms",
+          ssl: cfg.ssl !== undefined ? !!cfg.ssl : !!this.chConfigForm.ssl,
+          verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : !!this.chConfigForm.verify_ssl,
+        };
+        if (subTarget) {
+          this.$nextTick(() => {
+            const cardId =
+              subTarget === "clickhouse"
+                ? "config-card-clickhouse"
+                : subTarget === "github"
+                ? "config-card-github"
+                : subTarget === "redis" || subTarget === "memory"
+                ? "config-card-redis"
+                : null;
+            if (cardId) {
+              const el = document.getElementById(cardId);
+              if (el && typeof el.scrollIntoView === "function") {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }
+          });
+        }
       }
     },
 
@@ -680,7 +824,7 @@ document.addEventListener("alpine:init", () => {
     openStorageModal(tab = null) {
       if (tab) {
         this.storageBackendTab = tab;
-      } else if (!this.showStorageModal && !this.showRedisModal) {
+      } else {
         if (this.storageHealth.backend === "github") {
           this.storageBackendTab = "github";
         } else if (this.storageHealth.backend === "redis") {
@@ -689,8 +833,9 @@ document.addEventListener("alpine:init", () => {
           this.storageBackendTab = "memory";
         }
       }
-      this.showStorageModal = true;
-      this.showRedisModal = true;
+      this.showStorageModal = false;
+      this.showRedisModal = false;
+      this.switchSection("configuration", tab || this.storageBackendTab);
     },
 
     closeStorageModal() {
@@ -1022,6 +1167,12 @@ document.addEventListener("alpine:init", () => {
       if (this.storageHealth?.backend === "github") {
         return Boolean(p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted");
       }
+      if (p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted" || p.saved_to === "redis") {
+        return true;
+      }
+      if (this.storageHealth?.github_configured || this.storageHealth?.github?.configured) {
+        return true;
+      }
       return false;
     },
 
@@ -1030,16 +1181,28 @@ document.addEventListener("alpine:init", () => {
       if (this.storageHealth?.backend === "github") {
         return Boolean(p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted");
       }
+      if (p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted") {
+        return true;
+      }
       return false;
     },
 
     canCommitCurrentPolicy() {
-      if (this.storageHealth?.backend !== "github") return false;
-      if (this.isDirty) return true;
       const name = this.currentPolicyName || this.originalPolicyName || this.currentPolicy?.policy?.name;
       if (!name) return false;
       const p = this.policies?.find((x) => x.name === name);
-      return Boolean(p && (p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted"));
+      if (this.storageHealth?.backend === "github") {
+        if (this.isDirty) return true;
+        return Boolean(p && (p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted"));
+      }
+      if (this.isDirty) return true;
+      if (p && (p.uncommitted_changes || p.status === "modified" || p.status === "new_uncommitted" || p.saved_to === "redis")) {
+        return true;
+      }
+      if (this.storageHealth?.github_configured || this.storageHealth?.github?.configured) {
+        return true;
+      }
+      return false;
     },
 
     canCommitCurrentLog() {
@@ -1288,6 +1451,46 @@ document.addEventListener("alpine:init", () => {
           this.modeFilter === "all" || p.enforcementMode === this.modeFilter;
         return matchesQuery && matchesMode;
       });
+    },
+
+    async loadPolicy(policyName, options = {}) {
+      if (!policyName) return;
+      const resolved =
+        typeof this.resolvePolicyNameFromLog === "function"
+          ? this.resolvePolicyNameFromLog(policyName) || policyName
+          : policyName;
+      const prevSection = this.activeSection;
+      const prevView = this.view;
+      const prevTab = this.activeTab;
+      await this.openEditor(resolved, options.mode || this.editorMode || "visual");
+      if (options.preserveView) {
+        this.activeSection = prevSection;
+        this.view = prevView;
+        this.activeTab = prevTab;
+      }
+    },
+
+    async loadLogProfile(logName, options = {}) {
+      if (!logName) return;
+      await this.openLogEditor(logName, options.mode || this.logEditorMode || "visual");
+    },
+
+    async refreshLoadedPolicyIfMatching(policyName) {
+      if (!policyName) return;
+      const resolved =
+        typeof this.resolvePolicyNameFromLog === "function"
+          ? this.resolvePolicyNameFromLog(policyName) || policyName
+          : policyName;
+      if (
+        this.currentPolicyName &&
+        (this.currentPolicyName === policyName || this.currentPolicyName === resolved)
+      ) {
+        try {
+          await this.loadPolicy(resolved, { preserveView: true });
+        } catch (err) {
+          console.warn("Could not refresh loaded policy:", err);
+        }
+      }
     },
 
     async openEditor(policyName, mode = "visual") {
@@ -7592,5 +7795,901 @@ document.addEventListener("alpine:init", () => {
         }
       }
     },
+
+    // =========================================================================
+    // CLICKHOUSE VIOLATION LOGS & WAF POLICY FINE-TUNING
+    // =========================================================================
+
+    async loadClickHouseSchema() {
+      try {
+        const res = await fetch("/api/clickhouse/schema");
+        if (!res.ok) return;
+        const data = await res.json();
+        const tables = data.tables || {};
+        this.chSchema = {
+          tables,
+          operators: data.operators || [],
+          correlation_key: data.correlation_key || "support_id",
+        };
+        if (tables.v4_security_events && Array.isArray(tables.v4_security_events.columns)) {
+          this.chSchemaEventsColumns = tables.v4_security_events.columns;
+        }
+        if (
+          tables.v4_security_events_violation_data &&
+          Array.isArray(tables.v4_security_events_violation_data.columns)
+        ) {
+          this.chSchemaViolationColumns = tables.v4_security_events_violation_data.columns.map(
+            (c) => (typeof c === "string" ? c : c.name)
+          );
+        }
+        if (
+          tables.v4_security_events_signatures_data &&
+          Array.isArray(tables.v4_security_events_signatures_data.columns)
+        ) {
+          this.chSchemaSignaturesColumns = tables.v4_security_events_signatures_data.columns.map(
+            (c) => (typeof c === "string" ? c : c.name)
+          );
+        }
+        if (Array.isArray(data.operators) && data.operators.length > 0) {
+          this.chFilterOperators = data.operators.map((op) => ({
+            id: op.id || op.op,
+            label: op.label,
+          }));
+        }
+      } catch (e) {
+        console.warn("Failed to load ClickHouse schema:", e);
+      }
+    },
+
+    async loadClickHouseStatus(ping = true) {
+      try {
+        const res = await fetch(`/api/clickhouse/status?ping=${ping ? "true" : "false"}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const cfg = data.config || {};
+        this.chStatus = {
+          configured: !!data.configured,
+          connected: !!data.connected,
+          version: data.version || "",
+          database: data.database || cfg.database || "nms",
+          error: data.error || null,
+          persisted_in_redis: !!(data.persisted_in_redis || cfg.persisted_in_redis),
+          tables: data.tables || {},
+          config: {
+            host: cfg.host || "",
+            port: cfg.port || 8123,
+            username: cfg.username || "default",
+            database: data.database || cfg.database || "nms",
+            ssl: !!cfg.ssl,
+            verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : false,
+            has_password: !!cfg.has_password,
+            persisted_in_redis: !!(data.persisted_in_redis || cfg.persisted_in_redis),
+          },
+        };
+        this.chConfig = {
+          host: cfg.host || "",
+          port: cfg.port || 8123,
+          username: cfg.username || "default",
+          password: "",
+          has_password: !!cfg.has_password,
+          database: data.database || cfg.database || "nms",
+          ssl: !!cfg.ssl,
+          verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : false,
+        };
+        if (!this.chConfigForm.host && cfg.host) {
+          this.chConfigForm = {
+            host: cfg.host || "",
+            port: cfg.port || 8123,
+            username: cfg.username || "default",
+            password: "",
+            database: data.database || cfg.database || "nms",
+            ssl: !!cfg.ssl,
+            verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : false,
+          };
+        }
+      } catch (e) {
+        console.warn("Failed to load ClickHouse status:", e);
+      }
+    },
+
+    async openClickHouseModal() {
+      this.chModalError = "";
+      this.chModalSuccess = "";
+      this.chTestResult = null;
+      this.showClickHouseModal = false;
+      await this.switchSection("configuration", "clickhouse");
+    },
+
+    async testClickHouseConnection() {
+      this.chTesting = true;
+      this.chModalError = "";
+      this.chModalSuccess = "";
+      this.chTestResult = null;
+      try {
+        const payload = {
+          host: (this.chConfigForm.host || "").trim(),
+          port: parseInt(this.chConfigForm.port, 10) || 8123,
+          username: (this.chConfigForm.username || "default").trim(),
+          password: this.chConfigForm.password || "",
+          database: (this.chConfigForm.database || "nms").trim(),
+          ssl: !!this.chConfigForm.ssl,
+          verify_ssl: !!this.chConfigForm.verify_ssl,
+        };
+        const res = await fetch("/api/clickhouse/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const errMsg = data.detail || "Connection test failed.";
+          this.chModalError = errMsg;
+          this.chTestResult = { connected: false, error: errMsg };
+          return;
+        }
+        this.chTestResult = data;
+        this.chStatus = {
+          ...this.chStatus,
+          configured: !!data.configured,
+          connected: !!data.connected,
+          version: data.version || "",
+          database: data.database || payload.database,
+          error: data.error || null,
+          tables: data.tables || {},
+        };
+        if (data.connected) {
+          const resolvedDb = data.database || payload.database;
+          if (data.database) {
+            this.chConfigForm.database = data.database;
+          }
+          const tableCount = Object.values(data.tables || {}).filter((t) => t && t.exists).length;
+          this.chModalSuccess = `Connected to ClickHouse ${data.version || ""} (${tableCount}/3 WAF tables found in '${resolvedDb}').`;
+        } else {
+          this.chModalError = data.error || "Could not connect to ClickHouse.";
+        }
+      } catch (e) {
+        this.chModalError = `Connection error: ${e.message}`;
+        this.chTestResult = { connected: false, error: e.message };
+      } finally {
+        this.chTesting = false;
+      }
+    },
+
+    async saveClickHouseConfig() {
+      this.chSaving = true;
+      this.chModalError = "";
+      this.chModalSuccess = "";
+      this.chTestResult = null;
+      try {
+        const payload = {
+          host: (this.chConfigForm.host || "").trim(),
+          port: parseInt(this.chConfigForm.port, 10) || 8123,
+          username: (this.chConfigForm.username || "default").trim(),
+          password: this.chConfigForm.password || "",
+          database: (this.chConfigForm.database || "nms").trim(),
+          ssl: !!this.chConfigForm.ssl,
+          verify_ssl: !!this.chConfigForm.verify_ssl,
+        };
+        const res = await fetch("/api/clickhouse/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const errMsg = data.detail || "Failed to save ClickHouse configuration.";
+          this.chModalError = errMsg;
+          this.chTestResult = { connected: false, error: errMsg };
+          return;
+        }
+        const connInfo = data.connection || data;
+        this.chTestResult = connInfo;
+        const cfg = data.config || {};
+        const resolvedDb = connInfo.database || cfg.database || payload.database || "nms";
+        this.chStatus = {
+          configured: !!data.configured,
+          connected: !!data.connected,
+          version: data.version || connInfo.version || "",
+          database: resolvedDb,
+          error: data.error || null,
+          persisted_in_redis: !!data.persisted_in_redis,
+          tables: data.tables || connInfo.tables || {},
+          config: {
+            host: cfg.host || payload.host,
+            port: cfg.port || payload.port,
+            username: cfg.username || payload.username,
+            database: resolvedDb,
+            ssl: !!cfg.ssl,
+            verify_ssl: !!cfg.verify_ssl,
+            has_password: !!cfg.has_password,
+            persisted_in_redis: !!data.persisted_in_redis,
+          },
+        };
+        this.chConfig = {
+          host: cfg.host || payload.host,
+          port: cfg.port || payload.port,
+          username: cfg.username || payload.username,
+          password: "",
+          has_password: !!cfg.has_password,
+          database: resolvedDb,
+          ssl: !!cfg.ssl,
+          verify_ssl: !!cfg.verify_ssl,
+        };
+        this.chConfigForm.database = resolvedDb;
+
+        const persistNote = data.persisted_in_redis
+          ? "Saved & persisted in Redis across reboots."
+          : "Saved in memory (connect Redis to persist across reboots).";
+        if (data.connected) {
+          this.chModalSuccess = `Connected to ClickHouse ${data.version || ""}. ${persistNote}`;
+          this.chError = null;
+          this.notify(`ClickHouse connected (${this.chConfig.host}:${this.chConfig.port})`, "success");
+          if (this.activeSection === "violations") {
+            await this.searchClickHouseEvents(true);
+          }
+        } else {
+          this.chModalError = `Configuration saved (${persistNote}), but connection failed: ${data.error || "Unknown error"}`;
+        }
+      } catch (e) {
+        this.chModalError = `Failed to save config: ${e.message}`;
+        this.chTestResult = { connected: false, error: e.message };
+      } finally {
+        this.chSaving = false;
+      }
+    },
+
+    addChFieldFilter(defaultField = "", defaultOp = "contains", defaultVal = "") {
+      const col =
+        (defaultField || "").trim() ||
+        (this.chNewFilter && this.chNewFilter.column ? this.chNewFilter.column.trim() : "") ||
+        (this.chSchemaEventsColumns.length > 0 ? this.chSchemaEventsColumns[0].name : "support_id");
+      const op =
+        defaultOp ||
+        (this.chNewFilter && this.chNewFilter.operator ? this.chNewFilter.operator : "contains");
+      const val =
+        defaultVal ||
+        (this.chNewFilter && this.chNewFilter.value ? this.chNewFilter.value.trim() : "");
+      this.chFieldFilters.push({
+        field: col,
+        column: col,
+        operator: op,
+        value: op === "is_empty" || op === "is_not_empty" ? "" : val,
+      });
+      if (val || op === "is_empty" || op === "is_not_empty") {
+        this.searchClickHouseEvents(true);
+      }
+    },
+
+    removeChFieldFilter(idx) {
+      this.chFieldFilters.splice(idx, 1);
+      this.searchClickHouseEvents(true);
+    },
+
+    addQuickFieldFilterFromCell(column, value) {
+      if (!column || value === undefined || value === null) return;
+      const strVal = String(value);
+      const exists = this.chFieldFilters.some(
+        (f) => (f.field === column || f.column === column) && f.operator === "equals" && f.value === strVal
+      );
+      if (!exists) {
+        this.chFieldFilters.push({
+          field: column,
+          column: column,
+          operator: "equals",
+          value: strVal,
+        });
+        this.notify(`Added filter: ${column} = ${strVal}`, "info");
+        this.searchClickHouseEvents(true);
+      }
+    },
+
+    resetChFilters() {
+      this.chGlobalSearch = "";
+      this.chQuickFilters = {
+        support_id: "",
+        policy_name: "",
+        request_status: "",
+        severity: "",
+        http__request_method: "",
+        http__uri: "",
+        http__remote_addr: "",
+        violations: "",
+        signature_ids: "",
+      };
+      this.chFieldFilters = [];
+      this.chOffset = 0;
+      if (this.chStatus.configured) {
+        this.searchClickHouseEvents(true);
+      }
+    },
+
+    resetChVisibleColumns() {
+      this.chVisibleColumns = [
+        "timestamp",
+        "support_id",
+        "policy_name",
+        "request_status",
+        "severity",
+        "http__request_method",
+        "http__uri",
+        "http__remote_addr",
+        "violation_rating",
+        "violations",
+        "signature_ids",
+        "signature_names",
+      ];
+    },
+
+    toggleChSort(col) {
+      if (this.chSortBy === col) {
+        const nextDir = (this.chSortOrder || this.chSortDir) === "DESC" ? "ASC" : "DESC";
+        this.chSortOrder = nextDir;
+        this.chSortDir = nextDir;
+      } else {
+        this.chSortBy = col;
+        this.chSortOrder = "DESC";
+        this.chSortDir = "DESC";
+      }
+      this.searchClickHouseEvents(false);
+    },
+
+    chPrevPage() {
+      const step = parseInt(this.chLimit, 10) || 50;
+      this.chOffset = Math.max(0, this.chOffset - step);
+      this.searchClickHouseEvents(false);
+    },
+
+    chNextPage() {
+      const step = parseInt(this.chLimit, 10) || 50;
+      if (this.chOffset + step < this.chTotalEvents) {
+        this.chOffset += step;
+        this.searchClickHouseEvents(false);
+      }
+    },
+
+    async searchClickHouseEvents(resetOffset = true) {
+      if (resetOffset) {
+        this.chOffset = 0;
+      }
+      this.chLoading = true;
+      this.chError = "";
+
+      try {
+        // Combine custom 53-column filters + quick filters
+        const combinedFilters = (this.chFieldFilters || [])
+          .map((f) => {
+            const colName = (f.field || f.column || "").trim();
+            const opName = (f.operator || "contains").trim();
+            const valStr = f.value !== undefined && f.value !== null ? String(f.value).trim() : "";
+            return { field: colName, column: colName, operator: opName, value: valStr };
+          })
+          .filter(
+            (f) =>
+              f.column &&
+              (f.operator === "is_empty" || f.operator === "is_not_empty" || f.value !== "")
+          );
+
+        const qf = this.chQuickFilters || {};
+        if ((qf.support_id || "").trim()) {
+          combinedFilters.push({ field: "support_id", column: "support_id", operator: "contains", value: qf.support_id.trim() });
+        }
+        if ((qf.policy_name || "").trim()) {
+          combinedFilters.push({ field: "policy_name", column: "policy_name", operator: "contains", value: qf.policy_name.trim() });
+        }
+        if ((qf.request_status || "").trim()) {
+          combinedFilters.push({ field: "request_status", column: "request_status", operator: "equals", value: qf.request_status.trim() });
+        }
+        if ((qf.severity || "").trim()) {
+          combinedFilters.push({ field: "severity", column: "severity", operator: "equals", value: qf.severity.trim() });
+        }
+        if ((qf.http__request_method || "").trim()) {
+          combinedFilters.push({ field: "http__request_method", column: "http__request_method", operator: "equals", value: qf.http__request_method.trim() });
+        }
+        if ((qf.http__uri || "").trim()) {
+          combinedFilters.push({ field: "http__uri", column: "http__uri", operator: "contains", value: qf.http__uri.trim() });
+        }
+        if ((qf.http__remote_addr || "").trim()) {
+          combinedFilters.push({ field: "http__remote_addr", column: "http__remote_addr", operator: "contains", value: qf.http__remote_addr.trim() });
+        }
+        if ((qf.violations || "").trim()) {
+          combinedFilters.push({ field: "violations", column: "violations", operator: "contains", value: qf.violations.trim() });
+        }
+        if ((qf.signature_ids || "").trim()) {
+          combinedFilters.push({ field: "signature_ids", column: "signature_ids", operator: "contains", value: qf.signature_ids.trim() });
+        }
+
+        const sortDirection = this.chSortOrder || this.chSortDir || "DESC";
+        const payload = {
+          global_search: (this.chGlobalSearch || "").trim(),
+          filters: combinedFilters,
+          field_filters: combinedFilters,
+          limit: parseInt(this.chLimit, 10) || 50,
+          offset: this.chOffset || 0,
+          sort_by: this.chSortBy || "timestamp",
+          sort_order: sortDirection,
+          sort_dir: sortDirection,
+        };
+
+        const res = await fetch("/api/clickhouse/events/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.chError = data.detail || "Failed to query ClickHouse security events.";
+          this.chEvents = [];
+          this.chTotalEvents = 0;
+          return;
+        }
+        this.chEvents = data.rows || data.events || [];
+        this.chTotalEvents = data.total || 0;
+        this.chExecutedQuery = data.query || "";
+        this.chStatus.connected = true;
+
+        // If previously correlated support_id is no longer in the filtered results, clear or correlate first row
+        if (this.chEvents.length === 0) {
+          this.chSelectedSupportId = null;
+          this.chCorrelated = null;
+          this.chCorrelatedData = null;
+        } else if (this.chSelectedSupportId) {
+          const stillPresent = this.chEvents.some(
+            (r) => String(r.support_id) === String(this.chSelectedSupportId)
+          );
+          if (!stillPresent) {
+            this.chSelectedSupportId = null;
+            this.chCorrelated = null;
+            this.chCorrelatedData = null;
+          }
+        }
+      } catch (e) {
+        this.chError = `Error querying ClickHouse: ${e.message}`;
+      } finally {
+        this.chLoading = false;
+      }
+    },
+
+    resolvePolicyNameFromLog(rawPolicyName) {
+      if (!rawPolicyName) return "";
+      const clean = String(rawPolicyName).trim();
+      if (!clean || clean.toUpperCase() === "N/A") return "";
+      const list = Array.isArray(this.policies) ? this.policies : [];
+      // 1. Exact match
+      const exact = list.find((p) => p && p.name === clean);
+      if (exact) return exact.name;
+      // 2. Case-insensitive match
+      const lower = clean.toLowerCase();
+      const ci = list.find((p) => p && String(p.name || "").toLowerCase() === lower);
+      if (ci) return ci.name;
+      // 3. Normalized basename without path or .json suffix
+      const norm = (s) =>
+        String(s || "")
+          .trim()
+          .replace(/^.*[/\\]/, "")
+          .replace(/\.json$/i, "")
+          .toLowerCase();
+      const cleanNorm = norm(clean);
+      const normMatch = list.find((p) => p && norm(p.name) === cleanNorm);
+      if (normMatch) return normMatch.name;
+      return "";
+    },
+
+    async correlateClickHouseEvent(supportId, ev = null, userInitiated = true) {
+      if (!supportId) return;
+      const cleanId = String(supportId).trim();
+      this.chSelectedSupportId = cleanId;
+      this.chCorrelating = true;
+
+      try {
+        if (!Array.isArray(this.policies) || this.policies.length === 0) {
+          await this.loadPolicies();
+        }
+
+        // Automatically select the policy matching the violation's policy_name field
+        const selectedRow =
+          ev ||
+          (Array.isArray(this.chEvents)
+            ? this.chEvents.find((r) => String(r.support_id) === cleanId)
+            : null);
+        const rowPolicyRaw =
+          selectedRow &&
+          selectedRow.policy_name &&
+          String(selectedRow.policy_name).trim() !== "" &&
+          String(selectedRow.policy_name).trim().toUpperCase() !== "N/A"
+            ? String(selectedRow.policy_name).trim()
+            : "";
+
+        if (rowPolicyRaw) {
+          this.chInspectorLogPolicyName = rowPolicyRaw;
+          const matchedFromRow = this.resolvePolicyNameFromLog(rowPolicyRaw);
+          this.chTargetPolicy = matchedFromRow || rowPolicyRaw;
+        } else {
+          this.chInspectorLogPolicyName = "";
+        }
+
+        const qs = this.chTargetPolicy
+          ? `?policy_name=${encodeURIComponent(this.chTargetPolicy)}`
+          : "";
+        const res = await fetch(
+          `/api/clickhouse/events/${encodeURIComponent(cleanId)}/correlate${qs}`
+        );
+        const data = await res.json();
+        if (!res.ok) {
+          this.notify(data.detail || `Failed to correlate support_id ${cleanId}`, "error");
+          return;
+        }
+        this.chCorrelated = data;
+        this.chCorrelatedData = data;
+        this.chSignatureStates = data.policy_signature_states || {};
+
+        // Ensure policy_name from the correlated violation log is always auto-selected
+        const logPolicyFromData =
+          (data.log_policy_name && String(data.log_policy_name).trim()) ||
+          (data.event_summary &&
+            data.event_summary.policy_name &&
+            String(data.event_summary.policy_name).trim()) ||
+          rowPolicyRaw ||
+          "";
+        const cleanLogPolicy =
+          logPolicyFromData && logPolicyFromData.toUpperCase() !== "N/A"
+            ? logPolicyFromData
+            : "";
+
+        if (cleanLogPolicy) {
+          this.chInspectorLogPolicyName = cleanLogPolicy;
+          const resolvedPolicy =
+            data.matched_log_policy_name ||
+            this.resolvePolicyNameFromLog(cleanLogPolicy) ||
+            data.matched_policy_name ||
+            cleanLogPolicy;
+          if (resolvedPolicy && resolvedPolicy !== this.chTargetPolicy) {
+            this.chTargetPolicy = resolvedPolicy;
+            await this.onChTargetPolicyChange();
+          } else if (resolvedPolicy) {
+            this.chTargetPolicy = resolvedPolicy;
+          }
+        } else if (data.matched_policy_name) {
+          this.chTargetPolicy = data.matched_policy_name;
+        } else if (!this.chTargetPolicy && this.policies.length > 0) {
+          this.chTargetPolicy = this.policies[0].name;
+        }
+
+        if (userInitiated) {
+          this.$nextTick(() => {
+            const el = document.getElementById("ch-correlation-panel");
+            if (el && typeof el.scrollIntoView === "function") {
+              el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          });
+        }
+      } catch (e) {
+        this.notify(`Correlation error: ${e.message}`, "error");
+      } finally {
+        this.chCorrelating = false;
+      }
+    },
+
+    _applySignatureStatesToCorrelated(statesMap) {
+      const corr = this.chCorrelatedData || this.chCorrelated;
+      if (!corr) return;
+      const defaultStateFor = (sigId) => ({
+        signatureId: /^\d+$/.test(String(sigId)) ? parseInt(String(sigId), 10) : sigId,
+        in_policy: false,
+        status: "default",
+        enabled: null,
+        tag: null,
+      });
+      if (Array.isArray(corr.signatures_data)) {
+        corr.signatures_data = corr.signatures_data.map((row) => {
+          const sid = String(row.signature_id || "").trim();
+          return {
+            ...row,
+            policy_override: statesMap[sid] || defaultStateFor(sid),
+          };
+        });
+      }
+      if (Array.isArray(corr.unique_signatures)) {
+        corr.unique_signatures = corr.unique_signatures.map((row) => {
+          const sid = String(row.signature_id || "").trim();
+          return {
+            ...row,
+            policy_override: statesMap[sid] || defaultStateFor(sid),
+          };
+        });
+      }
+      this.chCorrelatedData = { ...corr };
+      this.chCorrelated = this.chCorrelatedData;
+    },
+
+    async onChTargetPolicyChange() {
+      this.chPolicySavedToRedis = false;
+      this.chUnsavedTuningCount = 0;
+      const corr = this.chCorrelatedData || this.chCorrelated;
+      if (!this.chTargetPolicy || !corr) {
+        this.chSignatureStates = {};
+        if (corr) this._applySignatureStatesToCorrelated({});
+        return;
+      }
+      const sigIds = (corr.unique_signatures || [])
+        .map((s) => s.signature_id)
+        .filter((id) => id !== undefined && id !== null && String(id).trim() !== "");
+      if (sigIds.length === 0) {
+        this.chSignatureStates = {};
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/clickhouse/policy/${encodeURIComponent(this.chTargetPolicy)}/signature-states?signature_ids=${encodeURIComponent(sigIds.join(","))}`
+        );
+        if (!res.ok) {
+          this.chSignatureStates = {};
+          return;
+        }
+        const data = await res.json();
+        this.chSignatureStates = data.states || {};
+        this._applySignatureStatesToCorrelated(this.chSignatureStates);
+      } catch (e) {
+        console.warn("Failed to load policy signature states:", e);
+      }
+    },
+
+    async tuneSignatureInPolicy(sigOrId, enabled, actionOrName = "") {
+      if (!this.chTargetPolicy) {
+        this.notify("Please select a Target WAF Policy first.", "warn");
+        return;
+      }
+      let rawId = sigOrId;
+      let sigName = "";
+      let action = "set";
+      if (sigOrId && typeof sigOrId === "object") {
+        rawId = sigOrId.signature_id ?? sigOrId.signatureId;
+        sigName = sigOrId.signature_name || "";
+        if (actionOrName === "remove" || enabled === null) {
+          action = "remove";
+        }
+      } else {
+        if (actionOrName === "remove" || enabled === null) {
+          action = "remove";
+        } else {
+          sigName = actionOrName || "";
+        }
+      }
+
+      const sigInt = parseInt(String(rawId).trim(), 10);
+      if (isNaN(sigInt)) {
+        this.notify(`Invalid signature_id: ${rawId}`, "error");
+        return;
+      }
+      this.chTuningInProgress = true;
+      this.chTuningBusy = true;
+      try {
+        const payload = {
+          policy_name: this.chTargetPolicy,
+          signature_id: sigInt,
+          enabled: action === "remove" ? null : enabled,
+          action: action,
+          signature_name: sigName || null,
+          support_id: this.chSelectedSupportId || null,
+        };
+        const res = await fetch("/api/clickhouse/policy/tune-signature", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.notify(data.detail || "Failed to update signature in policy.", "error");
+          return;
+        }
+
+        // Update local signature state map and correlated rows immediately
+        this.chSignatureStates = {
+          ...this.chSignatureStates,
+          [String(sigInt)]: data.signature_state,
+        };
+        this._applySignatureStatesToCorrelated(this.chSignatureStates);
+        this.chUnsavedTuningCount = (this.chUnsavedTuningCount || 0) + 1;
+        this.chPolicySavedToRedis = false;
+
+        // If this policy is also currently loaded in the Policy Builder, refresh it safely
+        await this.refreshLoadedPolicyIfMatching(data.policy_name || this.chTargetPolicy);
+        await this.loadPolicies();
+
+        const actionLabel =
+          enabled === false
+            ? "DISABLED (relaxed)"
+            : enabled === true
+            ? "ENABLED (enforced)"
+            : "RESET to policy default";
+        this.notify(`Signature ${sigInt} ${actionLabel} in policy '${data.policy_name || this.chTargetPolicy}'`, "success");
+      } catch (e) {
+        this.notify(`Failed to tune signature: ${e.message}`, "error");
+      } finally {
+        this.chTuningInProgress = false;
+        this.chTuningBusy = false;
+      }
+    },
+
+    async bulkTuneCorrelatedSignatures(enabled) {
+      if (!this.chTargetPolicy) {
+        this.notify("Please select a Target WAF Policy first.", "warn");
+        return;
+      }
+      const corr = this.chCorrelatedData || this.chCorrelated;
+      const uniqueSigs = (corr && corr.unique_signatures) || [];
+      if (uniqueSigs.length === 0) {
+        this.notify("No correlated signatures to update.", "warn");
+        return;
+      }
+      this.chTuningInProgress = true;
+      this.chTuningBusy = true;
+      try {
+        const payload = {
+          policy_name: this.chTargetPolicy,
+          support_id: this.chSelectedSupportId || null,
+          signatures: uniqueSigs.map((s) => ({
+            signature_id: parseInt(String(s.signature_id).trim(), 10),
+            enabled: enabled,
+            signature_name: s.signature_name || null,
+          })),
+        };
+        const res = await fetch("/api/clickhouse/policy/tune-signatures-bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.notify(data.detail || "Bulk signature update failed.", "error");
+          return;
+        }
+        const updatedStates = { ...this.chSignatureStates };
+        if (data.signature_states) {
+          Object.assign(updatedStates, data.signature_states);
+        }
+        for (const item of data.updated || []) {
+          const itemState = item.state || {
+            signatureId: item.signature_id,
+            in_policy: item.status !== "default",
+            status: item.status,
+            enabled: item.enabled,
+            tag: item.tag || null,
+          };
+          updatedStates[String(item.signature_id)] = itemState;
+        }
+        this.chSignatureStates = updatedStates;
+        this._applySignatureStatesToCorrelated(this.chSignatureStates);
+        this.chUnsavedTuningCount = (this.chUnsavedTuningCount || 0) + uniqueSigs.length;
+        this.chPolicySavedToRedis = false;
+
+        await this.refreshLoadedPolicyIfMatching(data.policy_name || this.chTargetPolicy);
+        await this.loadPolicies();
+
+        const actionWord = enabled === false ? "Disabled" : enabled === true ? "Enabled" : "Reset";
+        this.notify(
+          `${actionWord} ${uniqueSigs.length} correlated signature(s) in policy '${data.policy_name || this.chTargetPolicy}'`,
+          "success"
+        );
+      } catch (e) {
+        this.notify(`Bulk tune error: ${e.message}`, "error");
+      } finally {
+        this.chTuningInProgress = false;
+        this.chTuningBusy = false;
+      }
+    },
+
+    async saveInspectorFineTuning() {
+      return await this.saveTunedPolicyToRedis(this.chTargetPolicy, true);
+    },
+
+    async saveTunedPolicyToRedis(policyName = null, fromInspector = false) {
+      const target = policyName || this.chTargetPolicy || this.chInspectorLogPolicyName;
+      if (!target) {
+        this.notify("Please select a WAF policy to save.", "warn");
+        return;
+      }
+      const resolved =
+        typeof this.resolvePolicyNameFromLog === "function"
+          ? this.resolvePolicyNameFromLog(target) || target
+          : target;
+
+      this.chSavingPolicyToRedis = true;
+      this.chTuningInProgress = true;
+      try {
+        // Collect any active correlated signature overrides from the inspector if open
+        const corr = this.chCorrelatedData || this.chCorrelated;
+        const signaturesPayload = [];
+        if (corr && Array.isArray(corr.unique_signatures)) {
+          for (const sig of corr.unique_signatures) {
+            const sidStr = String(sig.signature_id || "").trim();
+            const sigInt = parseInt(sidStr, 10);
+            if (isNaN(sigInt)) continue;
+            const st =
+              (this.chSignatureStates && this.chSignatureStates[sidStr]) ||
+              sig.policy_override ||
+              null;
+            if (st && st.in_policy && (st.enabled === true || st.enabled === false)) {
+              signaturesPayload.push({
+                signature_id: sigInt,
+                enabled: st.enabled,
+                action: "set",
+                signature_name: sig.signature_name || null,
+                tag: st.tag || null,
+              });
+            }
+          }
+        }
+
+        const payload = {
+          policy_name: resolved,
+          support_id: this.chSelectedSupportId || null,
+          signatures: signaturesPayload.length > 0 ? signaturesPayload : null,
+        };
+
+        const res = await fetch("/api/clickhouse/policy/save-to-redis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.notify(data.detail || "Failed to save fine-tuned policy to Redis.", "error");
+          return;
+        }
+
+        const savedName = data.policy_name || resolved;
+        this.chTargetPolicy = savedName;
+        this.chUnsavedTuningCount = 0;
+        this.chPolicySavedToRedis = true;
+        this.chLastSavedPolicyName = savedName;
+
+        await this.refreshLoadedPolicyIfMatching(savedName);
+        await this.loadPolicies();
+        await this.checkStorageHealth(false);
+
+        const msg = fromInspector
+          ? `Fine-tuning changes saved for '${savedName}' to Redis (${data.total_signature_overrides ?? 0} signature overrides). Ready to commit to GitHub on the WAF Policies page.`
+          : data.message || `Policy '${savedName}' saved to Redis and marked ready to commit to GitHub from the WAF Policies page.`;
+        this.notify(msg, "success");
+      } catch (e) {
+        this.notify(`Failed to save policy to Redis: ${e.message}`, "error");
+      } finally {
+        this.chSavingPolicyToRedis = false;
+        this.chTuningInProgress = false;
+      }
+    },
+
+    async openPolicyFromTuning(policyName) {
+      const target = policyName || this.chTargetPolicy || this.chInspectorLogPolicyName;
+      if (!target) {
+        this.notify("Please select a WAF policy to open.", "warn");
+        return;
+      }
+      const resolved =
+        typeof this.resolvePolicyNameFromLog === "function"
+          ? this.resolvePolicyNameFromLog(target) || target
+          : target;
+      try {
+        if (!Array.isArray(this.policies) || this.policies.length === 0) {
+          await this.loadPolicies();
+        }
+        await this.openEditor(resolved, "visual");
+        this.activeSection = "waf";
+        this.view = "editor";
+        this.activeTab = "signatures";
+        await this.loadPolicies();
+      } catch (e) {
+        this.notify(`Failed to open policy '${resolved}': ${e.message}`, "error");
+      }
+    },
+
+    formatRawHttpRequest(str) {
+      if (!str) return "N/A";
+      return String(str)
+        .replace(/\\r\\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t");
+    },
   }));
 });
+

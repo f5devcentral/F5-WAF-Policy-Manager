@@ -10,6 +10,7 @@ Welcome to the visual walkthrough of **F5 WAF for NGINX Policy & Logging Profile
 3. [Logging Profiles Management & SIEM Formats](#3-logging-profiles-management--siem-formats)
 4. [Official Policy Compilation & Bundle Verification (`apcompile`)](#4-official-policy-compilation--bundle-verification-apcompile)
 5. [GitOps Synchronization, Conflict Resolution & Verbose Commits](#5-gitops-synchronization-conflict-resolution--verbose-commits)
+6. [ClickHouse Security Log Violations & WAF Policy Fine-Tuning](#6-clickhouse-security-log-violations--waf-policy-fine-tuning)
 
 ---
 
@@ -118,3 +119,29 @@ Adopt true Infrastructure-as-Code (IaC) and DevSecOps workflows by keeping your 
     - **Overwrite with GitHub Copy**: Reset to remote version.
 - **Direct GitHub REST Integration**:
   - Communicates directly via authenticated GitHub API (`httpx`) supporting custom branches, personal access tokens, and private repositories.
+
+---
+
+## 6. ClickHouse Security Log Violations & WAF Policy Fine-Tuning
+
+The **Violation Logs & Tuning** dashboard connects directly to the remote **ClickHouse** database inside **NGINX Instance Manager (NIM)** to search security violations, correlate event tables by `support_id`, and fine-tune WAF policies (`signature_id` tightening or relaxation).
+
+![WAF Policy Violation Logs & Fine-Tuning](screenshots/06_policy_tuning.png)
+
+### Key Capabilities:
+- **Centralized Configuration Section**:
+  - Dedicated **Configuration** tab in the main navigation bar consolidating settings for **Redis**, **GitHub (GitOps)**, and **ClickHouse**.
+  - ClickHouse credentials (`host`, `port`, `username`, `password`, `database`, `ssl`) are persisted in Redis under `waf:policy:__clickhouse__:config` so they survive container restarts.
+- **Full-Schema Search & Filtering (`v4_security_events`)**:
+  - Global full-text search and multi-condition field filters across all **42 columns** of `v4_security_events` (including `support_id`, `policy_name`, `uri`, `ip_client`, `outcome`, `outcome_reason`, `blocking_exception_reason`, `violation_rating`, `violations`, `sub_violations`, `sig_ids`, `sig_names`, `bot_category`, and `request`).
+  - One-click quick filter presets (`Blocked Only`, `High Violation Rating`, `Signature Hits`, `Truncated Payloads`) and time-window selectors (`Last 15m`, `1h`, `6h`, `24h`, `7d`, `30d`, `All Time`).
+- **3-Table `support_id` Correlation Inspector**:
+  - Clicking **Correlate & Tune** on any security event row joins all three ClickHouse tables by `support_id` (`v4_security_events`, `v4_security_events_violation_data`, and `v4_security_events_signatures_data`) in a single view:
+    - **Signatures (`v4_security_events_signatures_data`)**: Displays every triggered `signature_id` alongside its `signature_name`, `accuracy`, `risk`, `blocking_mask`, matched `buffer` (`offset` / `length`), and current state in the selected WAF policy.
+    - **Violation Data (`v4_security_events_violation_data`)**: Lists all correlated violation and sub-violation rows, contexts, and parameter/header details.
+    - **Raw HTTP & XML**: Full HTTP request inspection, XML `violation_details`, and a searchable key-value table of all 42 `v4_security_events` fields.
+    - **SQL Queries**: Displays the exact ClickHouse SQL queries executed for full transparency.
+- **Automatic Policy Selection & Interactive Signature Tuning**:
+  - Opening the Violation Inspector automatically selects the matching WAF policy in the **Policy to Fine-Tune** dropdown based on the violation's `policy_name` field, while allowing the user to switch to any other available policy at any time, or click **Open Policy →** to jump directly to that policy in the Visual Builder.
+  - Toggle individual signatures with **Enable** (tighten) or **Disable** (relax false positives), **Reset** overrides back to policy defaults, or apply bulk actions (**Enable All**, **Disable All**).
+  - Click **Save** inside the inspector or **Save Policy to Redis** in the header bar to persist fine-tuning changes to Redis and mark the policy as **Modified (in Redis)**, ready to be committed and pushed to GitHub from the **WAF Policies** page.

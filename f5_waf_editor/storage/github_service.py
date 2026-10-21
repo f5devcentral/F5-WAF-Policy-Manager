@@ -494,6 +494,28 @@ def push_policy_to_github(
     commit_sha = commit_data.get("sha", "")
     short_sha = commit_sha[:7] if commit_sha else ""
 
+    # Clear dirty flag in Redis / local metadata cache if present
+    try:
+        r_client = getattr(store, "client", None)
+        r_prefix = getattr(store, "key_prefix", "")
+        if r_client is not None:
+            r_client.srem(f"{r_prefix}__github_dirty_policies__", name)
+            meta_key = f"{r_prefix}__meta__:{name}"
+            raw_meta = r_client.get(meta_key)
+            if raw_meta:
+                meta_obj = json.loads(raw_meta)
+                if isinstance(meta_obj, dict):
+                    meta_obj["uncommitted_changes"] = False
+                    meta_obj["status"] = "synced"
+                    r_client.set(meta_key, json.dumps(meta_obj, ensure_ascii=False))
+        if hasattr(store, "_meta_cache") and isinstance(getattr(store, "_meta_cache", None), dict):
+            meta_entry = store._meta_cache.get(name)
+            if isinstance(meta_entry, dict):
+                meta_entry["uncommitted_changes"] = False
+                meta_entry["status"] = "synced"
+    except Exception:
+        pass
+
     logger.info("Committed policy '%s' to GitHub %s (commit: %s)", name, file_path, short_sha)
 
     return {

@@ -44,5 +44,17 @@ class Settings(BaseModel):
     # Compiler Service settings (apcompile container)
     compiler_service_url: str = Field(default=os.getenv("COMPILER_SERVICE_URL", ""))
 
+    # ClickHouse settings (NGINX Instance Manager security events database)
+    clickhouse_host: str = Field(default=os.getenv("CLICKHOUSE_HOST", ""))
+    clickhouse_port: int = Field(default=int(os.getenv("CLICKHOUSE_PORT", "8123")))
+    clickhouse_user: str = Field(default=os.getenv("CLICKHOUSE_USER", "default"))
+    clickhouse_password: str = Field(default=os.getenv("CLICKHOUSE_PASSWORD", ""))
+    clickhouse_database: str = Field(default=os.getenv("CLICKHOUSE_DATABASE", "nms"))
+    clickhouse_ssl: bool = Field(default=os.getenv("CLICKHOUSE_SSL", "false").lower() in ("true", "1", "yes"))
+    clickhouse_verify_ssl: bool = Field(
+        default=os.getenv("CLICKHOUSE_VERIFY_SSL", "true").lower() not in ("false", "0", "no")
+    )
+
 
 settings = Settings()
+
