@@ -4,14 +4,14 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Redis](https://img.shields.io/badge/Redis-5.0+-DC382D?logo=redis&logoColor=white)](https://redis.io)
 [![F5 WAF for NGINX](https://img.shields.io/badge/F5%20WAF%20for%20NGINX-Security-009639?logo=nginx&logoColor=white)](https://docs.nginx.com/waf/policies/configuration/)
-[![Tests](https://img.shields.io/badge/Tests-188%20passed-brightgreen?logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-197%20passed-brightgreen?logo=pytest&logoColor=white)](tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm%20Chart-326CE5?logo=kubernetes&logoColor=white)](helm/f5-waf-policy-manager)
 
-A modern, declarative DevSecOps web interface and REST management engine for **F5 WAF for NGINX** security policies, logging profiles, and user-defined custom signatures (Snort syntax).
+A modern, declarative DevSecOps web interface and REST management engine for **F5 WAF for NGINX** security policies, logging profiles, user-defined custom signatures (Snort syntax), and **ClickHouse Violation Log Analysis & Policy Fine-Tuning**.
 
-Backed by a high-performance **Redis** key-value store with automatic in-memory fallback, and an integrated **F5 WAF Compiler (`apcompile`)** service to validate and test binary policy bundle compilation directly within the UI.
+Backed by a high-performance **Redis** key-value store with automatic in-memory fallback, an integrated **F5 WAF Compiler (`apcompile`)** service to validate and test binary policy bundle compilation, and direct integration with **NGINX Instance Manager (NIM) ClickHouse** security event tables to correlate violations by `support_id` and tighten or relax `signature_id` rules in WAF policies.
 
 <p align="center">
   <img src="docs/screenshots/01_waf_policies_dashboard.png" alt="F5 WAF for NGINX Policy Manager Dashboard" width="100%">
@@ -33,6 +33,7 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 | **Logging Profiles** | [![Logging Profiles](docs/screenshots/03_logging_profiles_dashboard.png)](docs/walkthrough.md#3-logging-profiles-management--siem-formats) | Fleet-wide logging configuration with built-in presets for Splunk, ArcSight CEF, gRPC, and custom key-value formats. |
 | **Compiler Tester (`apcompile`)** | [![Compiler Tester](docs/screenshots/04_compiler_tester_modal.png)](docs/walkthrough.md#4-official-policy-compilation--bundle-verification-apcompile) | Real-time bundle validation and binary `.tgz` generation running the official F5 WAF compiler engine with diagnostic logging. |
 | **GitOps Version Control** | [![GitOps Commit](docs/screenshots/05_github_commit_push_modal.png)](docs/walkthrough.md#5-gitops-synchronization-conflict-resolution--verbose-commits) | Direct GitHub push with automated diff change summarization, conflict resolution on pull, and branch management. |
+| **ClickHouse Violation Logs & Tuning** | [Jump to Guide →](docs/walkthrough.md#6-clickhouse-security-log-violations--waf-policy-fine-tuning) | Search across all 53 columns of `v4_security_events`, correlate 3 NIM ClickHouse tables by `support_id`, and enable/disable `signature_id` in policies. |
 
 👉 **[Read the Full Visual Walkthrough Guide with Detailed Step-by-Step Instructions →](docs/walkthrough.md)**
 
@@ -42,8 +43,29 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 
 ### 🖥️ Modern DevSecOps Web Interface
 - **Theme Switcher**: Instant switching between an eye-friendly Light theme and a dark cybersecurity theme with persistent `localStorage` preference and synchronized CodeMirror syntax styling.
-- **Unified Navigation**: Switch seamlessly across **WAF Policies**, **Logging Profiles**, and **Compiler Diagnostics** dashboards.
-- **Real-Time Storage Health**: Live connection latency indicator with one-click Redis reconfiguration and resilient In-Memory fallback.
+- **Unified Navigation**: Switch seamlessly across **WAF Policies**, **Logging Profiles**, **Custom Signatures**, **Violation Logs & Tuning**, **Configuration**, and **Compiler Diagnostics** dashboards.
+- **Dedicated Configuration Section**: Centralized page to manage and test **Redis & Storage Mode**, **GitHub GitOps Settings**, and **ClickHouse Database Settings** in one place.
+
+---
+
+### 🔍 ClickHouse Violation Logs & WAF Policy Fine-Tuning (NGINX Instance Manager)
+- **Configurable & Persistent ClickHouse Connection**:
+  - Connect to the remote ClickHouse instance running within **NGINX Instance Manager (NIM)** (`host`, `port`, `username`, `password`, `database`, `ssl`, `verify_ssl`) from the **Configuration** section.
+  - Connection settings are **persisted in Redis** (`waf:policy:__clickhouse__:config`) so they survive container restarts and server reboots, and can also be pre-configured via environment variables.
+- **Full 53-Column Search on `v4_security_events`**:
+  - Search and filter across **all 53 fields** of `v4_security_events` with a dynamic multi-filter query builder (`equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `ends_with`, `gt`, `gte`, `lt`, `lte`, `in`, `is_empty`, `is_not_empty`), global keyword search, quick presets, sorting, and pagination.
+- **Three-Table Correlation by `support_id` & Automatic Policy Selection**:
+  - Selecting any security event correlates all three NGINX Instance Manager ClickHouse tables using `support_id` as the join key:
+    1. `v4_security_events` (53 columns — full HTTP request, client/bot intelligence, outcome, violation summary, and XML `violation_details`).
+    2. `v4_security_events_violation_data` (39 columns — per-violation breakdown, context, sub-violations, and blocking masks).
+    3. `v4_security_events_signatures_data` (42 columns — triggered attack signatures with `signature_id`, `signature_name`, `signature_accuracy`, `signature_risk`, `buffer`, `offset`, and `length`).
+  - **Automatic Policy Matching in the Violation Inspector**: Opening the correlated inspector automatically selects the matching WAF policy based on the violation's `policy_name` field and displays it as selected in the inspector's **Policy to Fine-Tune** dropdown menu, while allowing you to switch to any other available policy at any time.
+- **Interactive Signature Tightening & Relaxation (`signature_id`)**:
+  - Uses `signature_id` from `v4_security_events_signatures_data` to fine-tune any managed WAF policy (`policy.signatures`):
+    - **Enable (`enabled: true`)** — *Tighten policy* to enforce a triggered signature.
+    - **Disable (`enabled: false`)** — *Relax policy* to suppress false positives for a specific signature.
+    - **Reset to Default** — Remove explicit signature override from the policy.
+    - **Bulk Enable / Bulk Disable** — Apply signature changes across all signatures triggered in a `support_id` event in one click.
 
 ---
 
@@ -97,6 +119,7 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 ┌────────────────────────────────────────────────────────────────────────┐
 │                   Browser Client (Light / Dark UI)                     │
 │   ├── WAF Security Policies (Visual Builder / CodeMirror / Diff)       │
+│   ├── Violation Logs & Tuning (53-Field Search & 3-Table Correlation)  │
 │   ├── User Custom Signatures (Snort Rule Builder & Payload Tester)     │
 │   ├── IP Lists / Evasions / Signature Sets / URLs / Parameters         │
 │   └── Logging Profiles     (Visual Builder / SIEM Presets / Tokens)   │
@@ -105,21 +128,29 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 ┌───────────────────▼────────────────────┐   ┌───────────▼───────────────┐
 │     F5 WAF Policy Manager (FastAPI)    │   │  f5-waf-apcompile Service │
 │  ├── Policy & Custom Sig Validators    │   │  ├── apcompile CLI        │
-│  ├── Logging Profile Validator         │   │  ├── Attack Signatures    │
-│  ├── GitOps Synchronization Engine     │   │  ├── Bot Signatures       │
-│  ├── OpenAPI & BIG-IP Converters       │   │  └── Threat Campaigns     │
+│  ├── ClickHouse Violation Correlator   │   │  ├── Attack Signatures    │
+│  ├── Signature Fine-Tuning Engine      │   │  ├── Bot Signatures       │
+│  ├── GitOps Synchronization Engine     │   │  └── Threat Campaigns     │
 │  └── Storage Abstraction Layer         │   └───────────────────────────┘
-└───────────┬────────────────────────────┘
-            │
-            ├─────────────────────────────────────────┐
-            │ Working Copy (Fast CRUD)                │ GitOps Sync (Commit / Pull)
-            ▼                                         ▼
+└─────┬─────────────────────┬────────────┘
+      │                     │ ClickHouse HTTP SQL (support_id correlation)
+      │                     ▼
+      │         ┌────────────────────────────────────────────────────────┐
+      │         │    ClickHouse DB (NGINX Instance Manager / NMS)        │
+      │         │  • v4_security_events                 (53 columns)     │
+      │         │  • v4_security_events_violation_data  (39 columns)     │
+      │         │  • v4_security_events_signatures_data (42 columns)     │
+      │         └────────────────────────────────────────────────────────┘
+      │
+      ├─────────────────────────────────────────┐
+      │ Working Copy & Config Persistence       │ GitOps Sync (Commit / Pull)
+      ▼                                         ▼
 ┌───────────────────────────┐             ┌───────────────────────────────┐
 │       Redis Store         │             │       GitHub Repository       │
 │ • Active editing working  │             │ • Remote source-of-truth      │
 │   copy (policies & logs)  │  Startup    │ • Version-controlled JSON:    │
-│ • Instant save & diffs    │  Auto-Pull  │   ├── /policies/*.json        │
-│ • Redis 7 persistent DB   │ ◄────────── │   ├── /log-profiles/*.json    │
+│ • Persists ClickHouse DB  │  Auto-Pull  │   ├── /policies/*.json        │
+│   config across reboots   │ ◄────────── │   ├── /log-profiles/*.json    │
 │ • Resilient In-Memory     │  Explicit   │   └── /custom-signatures/*.json
 │   fallback if unavailable │  Commit     │                               │
 │                           │ ──────────► │ • Branch & commit history     │
@@ -233,7 +264,7 @@ env:
 ```
 
 #### 4. Runtime Configuration via Web Interface
-You can also view and test your GitHub connection directly in the web browser by clicking the **Storage Health** badge in the header and switching to the **GitHub GitOps** tab. Configuration entered in the UI updates the running application in-memory immediately. To ensure your credentials survive container recreation, save them in `.env`.
+You can also view and configure **Redis**, **GitHub GitOps**, and **ClickHouse** connections directly in the web browser by navigating to the **Configuration** tab in the top navigation bar (or clicking the **Storage Health** badge in the header). Configuration entered in the UI updates the running application immediately, and ClickHouse settings are persisted in Redis across restarts. To ensure your GitHub and Redis credentials survive container recreation, save them in `.env`.
 
 ---
 
@@ -252,6 +283,38 @@ You can also view and test your GitHub connection directly in the web browser by
 | `GITHUB_CUSTOM_SIGS_PATH` | No | `custom-signatures` | Subdirectory inside the repository where custom signature JSON files are stored. |
 
 *\* Required when GitHub GitOps synchronization is enabled.*
+
+---
+
+## 📊 ClickHouse Security Log Violations & WAF Policy Fine-Tuning
+
+F5 WAF Policy Manager connects directly to the **ClickHouse** database running inside **NGINX Instance Manager (NIM)** / **NGINX Management Suite (NMS)** to inspect real-world WAF violation logs and fine-tune security policies.
+
+### 🔗 Correlated ClickHouse Tables (`support_id`)
+
+All three NGINX Instance Manager ClickHouse security tables share `support_id` as their primary correlation key:
+
+| Table Name | Columns | Role in Violation Analysis & Policy Tuning |
+|---|---|---|
+| `v4_security_events` | **53 columns** | Main security event record (`timestamp`, `support_id`, `policy_name`, `request_status`, `severity`, `violation_rating`, `violations`, `sub_violations`, `http__uri`, `http__remote_addr`, `request`, `violation_details`, `signature_ids`, `bot_category`, `client_class`, etc.). Every single one of the 53 columns is searchable in the UI filter builder. |
+| `v4_security_events_violation_data` | **39 columns** | Detailed per-violation rows correlated by `support_id` (`violations`, `sub_violations`, `violation_context`, `blocking_mask`, `field_name`, `field_value`). |
+| `v4_security_events_signatures_data` | **42 columns** | Triggered attack signatures correlated by `support_id` (`signature_id`, `signature_name`, `signature_accuracy`, `signature_risk`, `blocking_mask`, `buffer`, `offset`, `length`, `violation_contexts`). Used directly to enable or disable `signature_id` in WAF policies. |
+
+### 💾 Persistent ClickHouse Configuration (Redis + Environment Variables)
+
+ClickHouse connection settings (`host`, `port`, `username`, `password`, `database`, `ssl`, `verify_ssl`) can be configured at runtime via the **Configuration → ClickHouse Database Settings** section in the Web UI or via `POST /api/clickhouse/config`.
+- When saved, the configuration is **automatically persisted in Redis** under the reserved key `waf:policy:__clickhouse__:config` and reloaded on startup so settings survive container restarts and server reboots.
+- You can also pre-populate defaults via `.env`, `docker-compose.yml`, or Helm (`values.yaml`):
+
+| Environment Variable | Required | Default | Description |
+|---|---|---|---|
+| `CLICKHOUSE_HOST` | No | `""` | Remote ClickHouse IP address or hostname (running in NGINX Instance Manager). |
+| `CLICKHOUSE_PORT` | No | `8123` | ClickHouse HTTP/HTTPS interface port (`8123` for HTTP, `8443` for HTTPS). |
+| `CLICKHOUSE_USER` | No | `default` | ClickHouse username. |
+| `CLICKHOUSE_PASSWORD` | No | `""` | ClickHouse password. |
+| `CLICKHOUSE_DATABASE` | No | `nms` | ClickHouse database containing the `v4_security_events*` tables (falls back to `default` automatically if `nms` is not present). |
+| `CLICKHOUSE_SSL` | No | `false` | Use HTTPS (`true`) or HTTP (`false`) when querying ClickHouse. |
+| `CLICKHOUSE_VERIFY_SSL` | No | `false` | Verify TLS certificates when `CLICKHOUSE_SSL=true`. |
 
 ---
 
@@ -287,7 +350,10 @@ sudo cp /etc/ssl/nginx/nginx-repo.key /etc/docker/certs.d/private-registry.nginx
 sudo chmod 644 /etc/docker/certs.d/private-registry.nginx.com/client.cert
 sudo chmod 600 /etc/docker/certs.d/private-registry.nginx.com/client.key
 
-# 4. Verify that Docker can pull the base compiler image
+# 4. (Optional) If you also have /etc/ssl/nginx/nginx-repo.jwt, log in with JWT:
+docker login private-registry.nginx.com -u "$(tr -d '[:space:]' < /etc/ssl/nginx/nginx-repo.jwt)" -p none
+
+# 5. Verify that Docker can pull the base compiler image
 docker pull private-registry.nginx.com/nap/waf-compiler:latest
 ```
 
@@ -301,17 +367,21 @@ chmod +x setup-registry-auth.sh
 
 ### Step 2: Build the Container Images
 
+> [!NOTE]
+> Modern Docker Compose uses `buildx bake` by default, which blocks secret mounts outside the current directory (`/etc/ssl/nginx/...`) with `additional privileges requested: pass "--allow=fs.read=..."`. Prepend `COMPOSE_BAKE=false` (or set `COMPOSE_BAKE=false` in `.env`) so Docker Compose can read `/etc/ssl/nginx/nginx-repo.crt` and `/etc/ssl/nginx/nginx-repo.key`.
+
 You can provide your NGINX certificate and key to `docker compose build` using any of the following approaches:
 
 #### Method A: Command-Line Inline Environment Variables (Recommended)
 Specify the paths to your valid NGINX repository certificate and key directly on the command line:
 
 ```bash
-NGINX_CERT=/etc/ssl/nginx/nginx-repo.crt NGINX_KEY=/etc/ssl/nginx/nginx-repo.key docker compose build
+COMPOSE_BAKE=false NGINX_CERT=/etc/ssl/nginx/nginx-repo.crt NGINX_KEY=/etc/ssl/nginx/nginx-repo.key docker compose build
 ```
 
 #### Method B: Export Variables in Your Shell Session
 ```bash
+export COMPOSE_BAKE=false
 export NGINX_CERT=/etc/ssl/nginx/nginx-repo.crt
 export NGINX_KEY=/etc/ssl/nginx/nginx-repo.key
 
@@ -327,6 +397,7 @@ cp .env.example .env
 
 Ensure `.env` contains:
 ```env
+COMPOSE_BAKE=false
 NGINX_CERT=/etc/ssl/nginx/nginx-repo.crt
 NGINX_KEY=/etc/ssl/nginx/nginx-repo.key
 WAF_COMPILER_IMAGE=private-registry.nginx.com/nap/waf-compiler:latest
@@ -345,7 +416,7 @@ docker compose build
 docker compose build waf-editor
 
 # Build only the apcompile service
-NGINX_CERT=/etc/ssl/nginx/nginx-repo.crt NGINX_KEY=/etc/ssl/nginx/nginx-repo.key docker compose build apcompile
+COMPOSE_BAKE=false NGINX_CERT=/etc/ssl/nginx/nginx-repo.crt NGINX_KEY=/etc/ssl/nginx/nginx-repo.key docker compose build apcompile
 ```
 
 ---
@@ -426,12 +497,14 @@ kubectl --namespace waf-system port-forward svc/f5-waf-editor 8000:80
 
 ## 🗄️ Redis Data Model
 
-Policies and logging profiles are cleanly isolated by key naming conventions:
+Policies, logging profiles, custom signatures, and ClickHouse connection settings are cleanly isolated by key naming conventions:
 
 | Resource Type | Redis Key Pattern | Document Schema | Example Key |
 |---|---|---|---|
-| **WAF Policy** | `<policy_name>` | JSON conforming to F5 WAF Schema | `prod_api_gateway_waf` |
-| **Logging Profile** | `log:<profile_name>` | JSON conforming to F5 Logging Schema | `log:log_splunk` |
+| **WAF Policy** | `waf:policy:<policy_name>` | JSON conforming to F5 WAF Schema | `waf:policy:prod_api_gateway_waf` |
+| **Logging Profile** | `waf:policy:log:<profile_name>` | JSON conforming to F5 Logging Schema | `waf:policy:log:log_splunk` |
+| **Custom Signatures** | `waf:policy:sig:<tag_name>` | JSON conforming to F5 Custom Signatures Schema | `waf:policy:sig:corp_custom_rules` |
+| **ClickHouse Config** | `waf:policy:__clickhouse__:config` | Persistent ClickHouse connection JSON (`host`, `port`, `username`, `password`, `database`, `ssl`, `verify_ssl`) | `waf:policy:__clickhouse__:config` |
 
 ---
 
@@ -456,6 +529,17 @@ Interactive OpenAPI documentation is available at [http://localhost:8000/docs](h
 | `POST` | `/api/log-profiles` | Create or update a logging profile |
 | `GET` | `/api/custom-signatures` | List custom signatures (Snort syntax) |
 | `POST` | `/api/custom-signatures/test` | Test Snort rule against HTTP payload |
+| `GET` | `/api/clickhouse/schema` | Return metadata & all columns for the 3 ClickHouse tables (`53`, `39`, `42` columns) |
+| `GET` | `/api/clickhouse/status` | Check ClickHouse connection health, latency, and table presence |
+| `GET` | `/api/clickhouse/config` | Retrieve current ClickHouse connection configuration |
+| `POST` | `/api/clickhouse/config` | Save ClickHouse connection settings (persisted in Redis across reboots) |
+| `POST` | `/api/clickhouse/test` | Test ClickHouse connectivity without persisting changes |
+| `POST` | `/api/clickhouse/events/search` | Search and filter `v4_security_events` across all 53 columns |
+| `GET` | `/api/clickhouse/events/{support_id}/correlate` | Correlate `v4_security_events`, `v4_security_events_violation_data`, and `v4_security_events_signatures_data` by `support_id` |
+| `POST` | `/api/clickhouse/events/correlate-batch` | Batch-correlate multiple `support_id` values across all 3 ClickHouse tables |
+| `GET` | `/api/clickhouse/policy/{policy_name}/signature-states` | Inspect whether specific `signature_id` values are enabled, disabled, or default in a WAF policy |
+| `POST` | `/api/clickhouse/policy/tune-signature` | Enable, disable, or reset a `signature_id` in a WAF policy (`policy.signatures`) |
+| `POST` | `/api/clickhouse/policy/tune-signatures-bulk` | Bulk enable, disable, or reset multiple `signature_id` values in a WAF policy |
 | `POST` | `/api/policies/{name}/github-push` | *(GitOps)* Commit and push policy from Redis to GitHub |
 | `POST` | `/api/log-profiles/{name}/github-push` | *(GitOps)* Commit and push logging profile from Redis to GitHub |
 | `POST` | `/api/custom-signatures/{tag}/github-push` | *(GitOps)* Commit and push custom signatures from Redis to GitHub |
@@ -471,7 +555,7 @@ Interactive OpenAPI documentation is available at [http://localhost:8000/docs](h
 
 ## 🧪 Testing
 
-The test suite validates schema enforcement, Snort syntax parsing, IP list formats, evasion rules, storage layers, and REST endpoints:
+The test suite validates schema enforcement, ClickHouse 53-field search & 3-table correlation, signature fine-tuning, Snort syntax parsing, IP list formats, evasion rules, storage layers, and REST endpoints:
 
 ```bash
 # Run pytest with uv
@@ -480,27 +564,29 @@ uv run pytest tests/ -v
 
 ```text
 ============================= test session starts =============================
-collected 171 items
+collected 193 items
 
-tests/test_api.py ........................................               [ 23%]
-tests/test_compiler.py .......                                           [ 27%]
+tests/test_api.py ........................................               [ 20%]
+tests/test_clickhouse_tuning.py .....                                    [ 23%]
+tests/test_compiler.py .......                                           [ 26%]
 tests/test_converter.py ......                                           [ 30%]
-tests/test_custom_signatures_api.py .......                              [ 35%]
-tests/test_custom_signatures_compiler.py ..                              [ 36%]
+tests/test_custom_signatures_api.py .......                              [ 33%]
+tests/test_custom_signatures_compiler.py ......                          [ 36%]
 tests/test_custom_signatures_storage.py ..                               [ 37%]
 tests/test_custom_signatures_validator.py .......                        [ 41%]
-tests/test_deployments.py ........                                       [ 46%]
-tests/test_github_storage.py .....                                       [ 49%]
-tests/test_logging_api.py ......                                         [ 52%]
-tests/test_logging_storage.py ..                                         [ 53%]
-tests/test_logging_validator.py .........                                [ 59%]
-tests/test_snort_validator.py ....                                       [ 61%]
-tests/test_storage.py ....                                               [ 63%]
-tests/test_templates.py ..                                               [ 64%]
-tests/test_url_parameters_and_sanitization.py ............               [ 71%]
+tests/test_deployments.py ........                                       [ 45%]
+tests/test_diff_summary.py ......                                        [ 48%]
+tests/test_github_storage.py ...........                                 [ 54%]
+tests/test_logging_api.py ......                                         [ 57%]
+tests/test_logging_storage.py ..                                         [ 58%]
+tests/test_logging_validator.py .........                                [ 63%]
+tests/test_snort_validator.py ....                                       [ 65%]
+tests/test_storage.py ....                                               [ 67%]
+tests/test_templates.py ..                                               [ 68%]
+tests/test_url_parameters_and_sanitization.py ............               [ 74%]
 tests/test_validator.py ................................................ [100%]
 
-====================== 171 passed, 4 warnings in 10.91s =======================
+====================== 193 passed, 4 warnings in 12.40s =======================
 ```
 
 ---

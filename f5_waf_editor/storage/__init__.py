@@ -192,6 +192,12 @@ def init_storage(
             _local_logging_storage = RedisLoggingStorage(redis_client=redis_storage.client)
             _local_custom_signatures_storage = RedisCustomSignaturesStorage(redis_client=redis_storage.client)
 
+            try:
+                from .clickhouse_service import get_clickhouse_service
+                get_clickhouse_service().load_config_from_redis()
+            except Exception as ch_exc:
+                logger.debug("Could not load ClickHouse config from Redis during init_storage: %s", ch_exc)
+
             if backend != "redis" and settings.storage_backend == "github" and is_github_configured():
                 return init_github_storage(auto_pull=False)
 

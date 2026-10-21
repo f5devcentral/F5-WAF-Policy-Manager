@@ -51,6 +51,13 @@ spec:
                   name: {{ include "f5-waf-policy-manager.secretName" . }}
                   key: {{ if and (not .Values.redis.enabled) .Values.redis.external.existingSecret }}{{ .Values.redis.external.passwordKey }}{{ else }}redis-password{{ end }}
             {{- end }}
+            {{- if and .Values.clickhouse (or .Values.clickhouse.password .Values.clickhouse.existingSecret) }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.clickhouse.existingSecret }}{{ .Values.clickhouse.existingSecret }}{{ else }}{{ include "f5-waf-policy-manager.fullname" . }}{{ end }}
+                  key: {{ .Values.clickhouse.passwordKey | default "clickhouse-password" }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

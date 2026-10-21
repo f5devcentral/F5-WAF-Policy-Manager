@@ -13,11 +13,13 @@ from fastapi.templating import Jinja2Templates
 
 from .config import settings
 import logging
-from .storage import get_storage, get_logging_storage, get_custom_signatures_storage
+from .storage import get_storage, get_logging_storage, get_custom_signatures_storage, init_github_storage
 from .storage.github_service import is_github_configured, pull_from_github
+from .storage.clickhouse_service import get_clickhouse_service
 from .api.routes import router as api_router
 from .api.logging_routes import router as logging_router
 from .api.custom_signatures_routes import router as custom_sigs_router
+from .api.clickhouse_routes import router as clickhouse_router
 
 logger = logging.getLogger("f5_waf_editor.app")
 
@@ -32,6 +34,12 @@ async def lifespan(app: FastAPI):
     pol_store = get_storage()
     log_store = get_logging_storage()
     custom_store = get_custom_signatures_storage()
+
+    # Load persisted ClickHouse configuration from Redis if present
+    try:
+        get_clickhouse_service().load_config_from_redis()
+    except Exception as exc:
+        logger.debug("ClickHouse config load on startup skipped: %s", exc)
 
     # If GitHub is configured, initialize GitHub GitOps storage
     if is_github_configured() or settings.storage_backend == "github":
@@ -69,6 +77,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.include_router(api_router)
 app.include_router(logging_router)
 app.include_router(custom_sigs_router)
+app.include_router(clickhouse_router)
 
 
 @app.get("/", response_class=HTMLResponse)

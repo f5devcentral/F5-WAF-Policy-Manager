@@ -64,7 +64,10 @@ class RedisPolicyStorage(PolicyStorage):
         policy_keys = [
             k for k in keys
             if not self._strip_prefix(k).startswith("log:")
+            and not self._strip_prefix(k).startswith("sig:")
             and not self._strip_prefix(k).startswith("__meta__:")
+            and not self._strip_prefix(k).startswith("__clickhouse__:")
+            and not self._strip_prefix(k).startswith("__github_")
         ]
         if not policy_keys:
             return []
@@ -113,7 +116,12 @@ class RedisPolicyStorage(PolicyStorage):
         return policies
 
     def get_policy(self, name: str) -> Optional[Dict[str, Any]]:
-        if name.startswith("log:"):
+        if (
+            name.startswith("log:")
+            or name.startswith("sig:")
+            or name.startswith("__clickhouse__:")
+            or name.startswith("__github_")
+        ):
             return None
         key = self._format_key(name)
         raw_val = self.client.get(key)

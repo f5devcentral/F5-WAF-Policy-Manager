@@ -178,3 +178,18 @@ apcompile:
     readOnlyRootFilesystem: false
     runAsNonRoot: false
 
+# -----------------------------------------------------------------------------
+# ClickHouse Configuration (NGINX Instance Manager Security Monitoring)
+# -----------------------------------------------------------------------------
+clickhouse:
+  host: ""
+  port: 8123
+  username: "default"
+  password: ""
+  existingSecret: ""
+  passwordKey: "clickhouse-password"
+  database: "nms"
+  ssl: false
+  verifySsl: false
+
+

@@ -52,7 +52,7 @@
   <script src="/static/js/app.js"></script>
 </head>
 
-<body class="bg-slate-50 dark:bg-darkbg text-slate-800 dark:text-slate-100 min-h-screen flex flex-col selection:bg-f5red selection:text-white" :class="(view === 'editor' || logView === 'editor') ? 'md:h-screen md:overflow-hidden' : ''" x-data="wafApp()">
+<body class="bg-slate-50 dark:bg-darkbg text-slate-800 dark:text-slate-100 min-h-screen flex flex-col selection:bg-f5red selection:text-white" :class="((activeSection === 'waf' && view === 'editor') || (activeSection === 'logging' && logView === 'editor')) ? 'md:h-screen md:overflow-hidden' : ''" x-data="wafApp()">
 
   <!-- Toast Notification -->
   <div x-show="toast.show" 
@@ -106,6 +106,23 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
           Logging Profiles
           <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-black/20 dark:bg-black/40 font-bold" x-text="logProfiles.length">0</span>
+        </button>
+
+        <button @click="switchSection('violations')"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                :class="activeSection === 'violations' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+          Violation Logs &amp; Tuning
+          <span class="w-2 h-2 rounded-full"
+                :class="chStatus.connected && chStatus.configured ? 'bg-emerald-400 animate-pulse' : (chStatus.configured ? 'bg-rose-400' : 'bg-slate-400')"
+                :title="chStatus.connected && chStatus.configured ? 'ClickHouse Connected' : 'ClickHouse Not Connected'"></span>
+        </button>
+
+        <button @click="switchSection('configuration')"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                :class="activeSection === 'configuration' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          Configuration
         </button>
       </nav>
     </div>
@@ -248,6 +265,25 @@
         </div>
       </template>
 
+      <!-- ClickHouse Violation Logs Actions for Header -->
+      <template x-if="activeSection === 'violations'">
+        <div class="flex items-center gap-2">
+          <button @click="openClickHouseModal()"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition"
+                  :class="chStatus.connected && chStatus.configured ? 'bg-amber-100 dark:bg-amber-950/40 border-amber-400 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 hover:bg-amber-200' : 'bg-rose-100 dark:bg-rose-950/40 border-rose-400 dark:border-rose-500/40 text-rose-800 dark:text-rose-300 hover:bg-rose-200'"
+                  title="Configure ClickHouse Connection (NGINX Instance Manager)">
+            <span class="w-2 h-2 rounded-full" :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
+            <span x-text="chStatus.configured ? ('ClickHouse: ' + (chStatus.config?.host || '') + ':' + (chStatus.config?.port || 8123)) : 'Configure ClickHouse'"></span>
+          </button>
+          <button @click="searchClickHouseEvents(true)"
+                  :disabled="chLoading"
+                  class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold shadow-lg shadow-amber-600/20 transition disabled:opacity-50">
+            <svg class="w-4 h-4" :class="chLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            <span x-text="chLoading ? 'Querying...' : 'Refresh Logs'"></span>
+          </button>
+        </div>
+      </template>
+
     </div>
   </header>
 
@@ -386,15 +422,15 @@
                           <span x-show="p.hasOpenApi" class="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500 border border-sky-500/30 text-[10px] font-mono font-bold" title="OpenAPI Schema External Reference Configured">OpenAPI</span>
                           <span x-show="p.hasGrpc" class="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[10px] font-mono font-bold" title="gRPC Policy Protection Configured">gRPC</span>
                           <!-- GitHub GitOps Status Badges -->
-                          <template x-if="storageHealth.backend === 'github'">
+                          <template x-if="storageHealth.backend === 'github' || p.uncommitted_changes || p.status === 'modified' || p.status === 'new_uncommitted'">
                             <span class="inline-flex items-center gap-1">
                               <span x-show="p.uncommitted_changes || p.status === 'modified' || p.status === 'new_uncommitted'" 
                                     class="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-500 text-[10px] font-mono font-bold flex items-center gap-1"
-                                    title="Uncommitted draft in local Redis cache">
+                                    title="Uncommitted draft in local Redis cache (ready to commit to GitHub)">
                                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                                 Draft
                               </span>
-                              <span x-show="!p.uncommitted_changes && p.status === 'synced'" 
+                              <span x-show="storageHealth.backend === 'github' && !p.uncommitted_changes && p.status === 'synced'" 
                                     class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-mono flex items-center gap-1"
                                     title="Synchronized with GitHub repository">
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -5257,6 +5293,1172 @@
   </div>
 
   <!-- ========================================================================= -->
+  <!-- SECTION C: CLICKHOUSE VIOLATION LOGS & WAF POLICY FINE-TUNING             -->
+  <!-- ========================================================================= -->
+  <div x-show="activeSection === 'violations'" class="flex-1 min-h-0 flex flex-col" style="display: none;">
+    <main class="max-w-[1720px] 2xl:max-w-[1850px] w-full mx-auto p-4 sm:p-6 flex flex-col gap-5">
+
+      <!-- 1. TOP CONNECTION & TARGET WAF POLICY BAR -->
+      <div class="glass-panel rounded-2xl border p-4 sm:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-xl">
+        <div class="flex items-start sm:items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-base font-bold text-slate-900 dark:text-white">WAF Violation Browser &amp; Policy Signature Tightening</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                    :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'"
+                    x-text="chStatus.connected && chStatus.configured ? ('ClickHouse Connected (' + (chStatus.database || chStatus.config?.database || 'nms') + ')') : (chStatus.configured ? 'Connection Error' : 'Not Configured')"></span>
+              <template x-if="chStatus.persisted_in_redis || chStatus.config?.persisted_in_redis">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30"
+                      title="ClickHouse connection credentials are persisted in Redis (__clickhouse__:config) across reboots">
+                  Persisted in Redis
+                </span>
+              </template>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Search across all <span class="font-semibold text-slate-700 dark:text-slate-200" x-text="chSchemaEventsColumns.length || 53">53</span> fields in <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events</code>, correlate <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events_violation_data</code> &amp; <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events_signatures_data</code> by <code class="font-mono font-bold text-emerald-600 dark:text-emerald-400">support_id</code>, and enable/disable <code class="font-mono font-bold text-purple-600 dark:text-purple-400">signature_id</code> in your WAF policy.
+            </p>
+          </div>
+        </div>
+
+        <!-- Target WAF Policy Selector, Save Policy to Redis & ClickHouse Config Button -->
+        <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
+          <div class="flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-800">
+            <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">Target Policy:</label>
+            <select x-model="chTargetPolicy"
+                    @change="onChTargetPolicyChange()"
+                    class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 min-w-[200px]">
+              <option value="">-- Select WAF Policy to Tune --</option>
+              <template x-for="pol in policies" :key="pol.name">
+                <option :value="pol.name" x-text="pol.name + (pol.enforcement_mode ? ' [' + pol.enforcement_mode + ']' : '')"></option>
+              </template>
+            </select>
+            <template x-if="chTargetPolicy">
+              <div class="flex items-center gap-2">
+                <button @click="saveTunedPolicyToRedis(chTargetPolicy, false)"
+                        :disabled="chSavingPolicyToRedis || chTuningInProgress"
+                        class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-bold shadow-md shadow-emerald-600/20 transition whitespace-nowrap disabled:opacity-50"
+                        title="Save this fine-tuned WAF policy to Redis and mark it as a modified draft so it can be committed to GitHub from the WAF Policies page">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                  </svg>
+                  <span x-text="chSavingPolicyToRedis ? 'Saving to Redis...' : 'Save Policy to Redis'"></span>
+                </button>
+                <button @click="openPolicyFromTuning(chTargetPolicy)"
+                        class="px-2.5 py-1 rounded-lg bg-f5red/15 hover:bg-f5red/25 border border-f5red/30 text-f5red dark:text-rose-300 text-[11px] font-semibold transition whitespace-nowrap"
+                        title="Open this WAF policy in the Visual Editor on the Attack Signatures tab">
+                  Open Policy &rarr;
+                </button>
+              </div>
+            </template>
+          </div>
+
+          <button @click="openClickHouseModal()"
+                  class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 transition">
+            <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            ClickHouse Settings
+          </button>
+        </div>
+      </div>
+
+      <!-- Connection Alert Banner if ClickHouse is not configured or unreachable -->
+      <template x-if="!chStatus.configured || chError">
+        <div class="rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+             :class="!chStatus.configured ? 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <div class="text-xs">
+              <div class="font-bold" x-text="!chStatus.configured ? 'ClickHouse Database Connection Not Configured' : 'ClickHouse Query / Connection Notice'"></div>
+              <div class="mt-0.5 opacity-90" x-text="chError || 'Configure the NGINX Instance Manager ClickHouse IP address, port, username, and password to browse WAF security violation logs. Credentials are persisted in Redis across reboots.'"></div>
+            </div>
+          </div>
+          <button @click="openClickHouseModal()"
+                  class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow transition shrink-0">
+            Configure ClickHouse
+          </button>
+        </div>
+      </template>
+
+      <!-- 2. SEARCH & FULL 53-FIELD FILTER BUILDER PANEL (v4_security_events) -->
+      <div class="glass-panel rounded-2xl border p-4 sm:p-5 flex flex-col gap-4 shadow-xl">
+        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <!-- Global Search across all 53 fields -->
+          <div class="relative flex-1">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <input type="text"
+                   x-model="chGlobalSearch"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="Global search across all 53 fields in v4_security_events (e.g. support_id, /etc/passwd, 200010468, curl, 127.0.0.1, policy_name)..."
+                   class="w-full pl-10 pr-24 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500">
+            <button x-show="chGlobalSearch"
+                    @click="chGlobalSearch = ''; searchClickHouseEvents(true)"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-white">
+              Clear
+            </button>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button @click="addChFieldFilter()"
+                    class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition">
+              <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+              + Field Filter (<span x-text="chFieldFilters.length">0</span>)
+            </button>
+
+            <button @click="chShowColumnPicker = !chShowColumnPicker"
+                    class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition">
+              <svg class="w-3.5 h-3.5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path></svg>
+              Columns (<span x-text="chVisibleColumns.length"></span>/53)
+            </button>
+
+            <button @click="resetChFilters()"
+                    class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-400 transition">
+              Reset
+            </button>
+
+            <button @click="searchClickHouseEvents(true)"
+                    :disabled="chLoading"
+                    class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-lg shadow-amber-600/20 transition disabled:opacity-50">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              Search Violations
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Column Filters Row (Most Frequently Used Fields of v4_security_events) -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800/80">
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">support_id</label>
+            <input type="text" x-model="chQuickFilters.support_id"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="e.g. 10134279319999872904"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">policy_name</label>
+            <input type="text" x-model="chQuickFilters.policy_name"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="e.g. nms_app_protect_default_policy"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">request_status</label>
+            <select x-model="chQuickFilters.request_status" @change="searchClickHouseEvents(true)"
+                    class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+              <option value="">All Statuses</option>
+              <option value="blocked">blocked</option>
+              <option value="alerted">alerted</option>
+              <option value="passed">passed</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">severity</label>
+            <select x-model="chQuickFilters.severity" @change="searchClickHouseEvents(true)"
+                    class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+              <option value="">All Severities</option>
+              <option value="critical">critical</option>
+              <option value="error">error</option>
+              <option value="warning">warning</option>
+              <option value="notice">notice</option>
+              <option value="informational">informational</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">http__request_method</label>
+            <select x-model="chQuickFilters.http__request_method" @change="searchClickHouseEvents(true)"
+                    class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+              <option value="">All Methods</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+              <option value="PATCH">PATCH</option>
+              <option value="OPTIONS">OPTIONS</option>
+              <option value="HEAD">HEAD</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">http__uri</label>
+            <input type="text" x-model="chQuickFilters.http__uri"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="e.g. /etc/passwd"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">http__remote_addr</label>
+            <input type="text" x-model="chQuickFilters.http__remote_addr"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="e.g. 127.0.0.1"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">signature_ids</label>
+            <input type="text" x-model="chQuickFilters.signature_ids"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="e.g. 200010468"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 mb-1">violations</label>
+            <input type="text" x-model="chQuickFilters.violations"
+                   @input.debounce.400ms="searchClickHouseEvents(true)"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="e.g. Attack signature"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+
+        <!-- Advanced Multi-Field Filter Builder (All 53 Columns of v4_security_events) -->
+        <template x-if="chFieldFilters.length > 0">
+          <div class="flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-slate-800/80">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                Advanced Field Filters (<code class="font-mono">v4_security_events</code> &mdash; all 53 columns supported)
+              </span>
+              <button @click="chFieldFilters = []; searchClickHouseEvents(true)"
+                      class="text-[11px] text-rose-500 hover:underline">
+                Remove All Field Filters
+              </button>
+            </div>
+            <template x-for="(flt, fIdx) in chFieldFilters" :key="fIdx">
+              <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-100/80 dark:bg-slate-900/70 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold" x-text="fIdx === 0 ? 'WHERE' : 'AND'"></span>
+                <!-- Column Selector (All 53 Columns) -->
+                <select x-model="flt.field"
+                        @change="flt.column = flt.field; searchClickHouseEvents(true)"
+                        class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 min-w-[220px]">
+                  <template x-for="col in chSchemaEventsColumns" :key="col.name">
+                    <option :value="col.name" x-text="col.name + ' (' + col.category + ')'"></option>
+                  </template>
+                </select>
+                <!-- Operator Selector -->
+                <select x-model="flt.operator"
+                        @change="searchClickHouseEvents(true)"
+                        class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 min-w-[180px]">
+                  <template x-for="op in chFilterOperators" :key="op.id">
+                    <option :value="op.id" x-text="op.label"></option>
+                  </template>
+                </select>
+                <!-- Value Input -->
+                <input type="text"
+                       x-show="flt.operator !== 'is_empty' && flt.operator !== 'is_not_empty'"
+                       x-model="flt.value"
+                       @input.debounce.400ms="searchClickHouseEvents(true)"
+                       @keydown.enter="searchClickHouseEvents(true)"
+                       placeholder="Filter value..."
+                       class="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+                <button @click="removeChFieldFilter(fIdx)"
+                        class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition"
+                        title="Remove filter">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Column Picker Drawer (All 53 Columns of v4_security_events) -->
+        <div x-show="chShowColumnPicker" class="pt-3 border-t border-slate-200 dark:border-slate-800/80 flex flex-col gap-2" style="display: none;">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700 dark:text-slate-300">Select Visible Table Columns (<code class="font-mono">v4_security_events</code> &mdash; 53 Fields):</span>
+            <div class="flex items-center gap-2">
+              <button @click="resetChVisibleColumns()" class="text-[11px] text-amber-600 dark:text-amber-400 hover:underline">Default Columns</button>
+              <span class="text-slate-400">&bull;</span>
+              <button @click="chVisibleColumns = chSchemaEventsColumns.map(c => c.name)" class="text-[11px] text-sky-600 dark:text-sky-400 hover:underline">Select All 53 Columns</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-1.5 max-h-48 overflow-y-auto p-2 rounded-xl bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+            <template x-for="col in chSchemaEventsColumns" :key="col.name">
+              <label class="flex items-center gap-1.5 text-[11px] font-mono text-slate-700 dark:text-slate-300 cursor-pointer hover:text-amber-500 truncate" :title="col.description">
+                <input type="checkbox" :value="col.name" x-model="chVisibleColumns" class="rounded border-slate-400 text-amber-600 focus:ring-amber-500">
+                <span class="truncate" x-text="col.name"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. CORRELATED 3-TABLE INSPECTOR & POLICY SIGNATURE TIGHTENING PANEL (WHEN A SUPPORT_ID IS SELECTED) -->
+      <template x-if="chCorrelatedData">
+        <div id="ch-correlation-panel" class="glass-panel rounded-2xl border-2 border-amber-500/50 dark:border-amber-500/40 p-4 sm:p-6 flex flex-col gap-4 shadow-2xl">
+          <!-- Correlation Header -->
+          <div class="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-start sm:items-center gap-3">
+              <div class="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-700 dark:text-amber-300 font-mono text-xs font-bold flex items-center gap-2">
+                <span>support_id:</span>
+                <span class="text-sm select-all" x-text="chCorrelatedData.support_id"></span>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                  <span>3-Table Correlated Security Event &amp; Signature Tightening</span>
+                  <template x-if="chCorrelatedData.log_policy_name || chInspectorLogPolicyName || chCorrelatedData.target_policy_name">
+                    <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300"
+                          x-text="'Log policy_name: ' + (chCorrelatedData.log_policy_name || chInspectorLogPolicyName || chCorrelatedData.target_policy_name)"></span>
+                  </template>
+                </h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                  Correlated records across <code class="font-mono">v4_security_events</code> (<span x-text="chCorrelatedData.counts?.security_events || 0"></span>),
+                  <code class="font-mono">v4_security_events_violation_data</code> (<span x-text="chCorrelatedData.counts?.violation_data || 0"></span>), and
+                  <code class="font-mono">v4_security_events_signatures_data</code> (<span x-text="chCorrelatedData.counts?.signatures_data || 0"></span>)
+                </p>
+              </div>
+            </div>
+
+            <!-- Inspector Target WAF Policy Dropdown & Actions -->
+            <div class="flex flex-wrap items-center gap-2.5 w-full xl:w-auto justify-end">
+              <div class="flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-900/90 px-3 py-1.5 rounded-xl border border-amber-500/40 shadow-sm">
+                <label for="ch-inspector-policy-select" class="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 whitespace-nowrap">
+                  Policy to Fine-Tune:
+                </label>
+                <select id="ch-inspector-policy-select"
+                        x-model="chTargetPolicy"
+                        @change="onChTargetPolicyChange()"
+                        class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 min-w-[210px]">
+                  <option value="">-- Select WAF Policy --</option>
+                  <template x-if="chInspectorLogPolicyName && !policies.some(p => p.name === chInspectorLogPolicyName)">
+                    <option :value="chInspectorLogPolicyName" x-text="chInspectorLogPolicyName + ' (from violation log)'"></option>
+                  </template>
+                  <template x-for="pol in policies" :key="pol.name">
+                    <option :value="pol.name"
+                            :selected="pol.name === chTargetPolicy"
+                            x-text="pol.name + (pol.enforcement_mode ? ' [' + pol.enforcement_mode + ']' : '')"></option>
+                  </template>
+                </select>
+                <template x-if="chTargetPolicy">
+                  <div class="flex items-center gap-2">
+                    <button @click="saveInspectorFineTuning()"
+                            :disabled="chSavingPolicyToRedis || chTuningInProgress"
+                            class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-bold shadow-md shadow-emerald-600/20 transition whitespace-nowrap disabled:opacity-50"
+                            title="Save fine-tuning signature changes for this policy to Redis">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                      <span x-text="chSavingPolicyToRedis ? 'Saving...' : (chUnsavedTuningCount > 0 ? 'Save (' + chUnsavedTuningCount + ')' : 'Save')"></span>
+                    </button>
+                    <button @click="openPolicyFromTuning(chTargetPolicy)"
+                            class="px-2.5 py-1 rounded-lg bg-f5red/15 hover:bg-f5red/25 border border-f5red/30 text-f5red dark:text-rose-300 text-[11px] font-semibold transition whitespace-nowrap"
+                            title="Open this WAF policy in the Visual Editor on the Attack Signatures tab">
+                      Open Policy &rarr;
+                    </button>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Bulk Policy Tuning Actions for Triggered Signatures -->
+              <template x-if="(chCorrelatedData.unique_signatures || []).length > 0">
+                <div class="flex items-center gap-2">
+                  <button @click="bulkTuneCorrelatedSignatures(true)"
+                          :disabled="!chTargetPolicy || chTuningInProgress"
+                          class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition disabled:opacity-40"
+                          title="Enable (tighten) all signatures triggered in this support_id in the selected WAF Policy">
+                    Enable All Signatures (Tighten)
+                  </button>
+                  <button @click="bulkTuneCorrelatedSignatures(false)"
+                          :disabled="!chTargetPolicy || chTuningInProgress"
+                          class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow transition disabled:opacity-40"
+                          title="Disable (relax) all signatures triggered in this support_id in the selected WAF Policy">
+                    Disable All Signatures (Relax)
+                  </button>
+                </div>
+              </template>
+              <button @click="chCorrelatedData = null; chCorrelated = null; chSelectedSupportId = null"
+                      class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition">
+                Close Inspector &times;
+              </button>
+            </div>
+          </div>
+
+          <!-- 3-Table Navigation Tabs -->
+          <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+            <button @click="chCorrelationTab = 'signatures'"
+                    class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition"
+                    :class="chCorrelationTab === 'signatures' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'">
+              <span>1. <code class="font-mono">v4_security_events_signatures_data</code> &amp; Policy Tuning</span>
+              <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-black/20 font-mono" x-text="chCorrelatedData.counts?.signatures_data || 0">0</span>
+            </button>
+
+            <button @click="chCorrelationTab = 'violations'"
+                    class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition"
+                    :class="chCorrelationTab === 'violations' ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/25' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'">
+              <span>2. <code class="font-mono">v4_security_events_violation_data</code></span>
+              <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-black/20 font-mono" x-text="chCorrelatedData.counts?.violation_data || 0">0</span>
+            </button>
+
+            <button @click="chCorrelationTab = 'event_details'"
+                    class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition"
+                    :class="chCorrelationTab === 'event_details' ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/25' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'">
+              <span>3. <code class="font-mono">v4_security_events</code> (All 53 Fields &amp; Raw HTTP Request)</span>
+              <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-black/20 font-mono" x-text="chCorrelatedData.counts?.security_events || 0">0</span>
+            </button>
+          </div>
+
+          <!-- TAB 1: v4_security_events_signatures_data & Policy Signature Fine-Tuning -->
+          <div x-show="chCorrelationTab === 'signatures'" class="flex flex-col gap-3">
+            <template x-if="!chTargetPolicy">
+              <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+                <span>Select a <strong>Target WAF Policy</strong> in the top bar to enable or disable these <code class="font-mono">signature_id</code> entries directly in your policy.</span>
+              </div>
+            </template>
+
+            <template x-if="(chCorrelatedData.signatures_data || []).length === 0">
+              <div class="p-6 text-center rounded-xl bg-slate-100/60 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+                No rows found in <code class="font-mono">v4_security_events_signatures_data</code> for <code class="font-mono" x-text="'support_id = ' + chCorrelatedData.support_id"></code>.
+              </div>
+            </template>
+
+            <template x-if="(chCorrelatedData.signatures_data || []).length > 0">
+              <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="bg-slate-100 dark:bg-slate-900/90 text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                      <th class="py-2.5 px-3">signature_id</th>
+                      <th class="py-2.5 px-3">signature_name</th>
+                      <th class="py-2.5 px-3">accuracy / risk</th>
+                      <th class="py-2.5 px-3">buffer (offset / length)</th>
+                      <th class="py-2.5 px-3">violation_contexts / field_names</th>
+                      <th class="py-2.5 px-3">Policy Status (<span x-text="chTargetPolicy || 'No Policy Selected'"></span>)</th>
+                      <th class="py-2.5 px-3 text-right">Signature Fine-Tuning Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 dark:divide-slate-800/70">
+                    <template x-for="(sigRow, sIdx) in chCorrelatedData.signatures_data" :key="sigRow.uuid || (sigRow.signature_id + '-' + sIdx)">
+                      <tr class="hover:bg-slate-100/70 dark:hover:bg-slate-800/40 transition">
+                        <td class="py-3 px-3 font-mono font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">
+                          <span class="px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 select-all" x-text="sigRow.signature_id"></span>
+                        </td>
+                        <td class="py-3 px-3 font-medium text-slate-900 dark:text-white max-w-xs">
+                          <div class="font-semibold" x-text="sigRow.signature_name || 'N/A'"></div>
+                          <div class="text-[10px] font-mono text-slate-500 mt-0.5" x-text="'uuid: ' + (sigRow.uuid || '') + ' | mask: ' + (sigRow.blocking_mask ?? '')"></div>
+                        </td>
+                        <td class="py-3 px-3 whitespace-nowrap">
+                          <div class="flex items-center gap-1.5">
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                  x-text="'acc: ' + (sigRow.signature_accuracy || 'N/A')"></span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase"
+                                  :class="{
+                                    'bg-rose-500/20 text-rose-700 dark:text-rose-300': (sigRow.signature_risk || '').toLowerCase() === 'high',
+                                    'bg-amber-500/20 text-amber-700 dark:text-amber-300': (sigRow.signature_risk || '').toLowerCase() === 'medium',
+                                    'bg-sky-500/20 text-sky-700 dark:text-sky-300': (sigRow.signature_risk || '').toLowerCase() === 'low'
+                                  }"
+                                  x-text="'risk: ' + (sigRow.signature_risk || 'N/A')"></span>
+                          </div>
+                        </td>
+                        <td class="py-3 px-3 font-mono text-[11px]">
+                          <div class="px-2 py-1 rounded bg-slate-900 text-amber-300 max-w-xs truncate" :title="sigRow.buffer" x-text="sigRow.buffer || 'N/A'"></div>
+                          <div class="text-[10px] text-slate-500 mt-0.5" x-text="'offset=' + (sigRow.offset ?? 0) + ', length=' + (sigRow.length ?? 0)"></div>
+                        </td>
+                        <td class="py-3 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                          <div x-text="sigRow.violation_contexts || 'N/A'"></div>
+                          <div class="text-[10px] text-slate-500" x-text="(sigRow.field_names || '') + (sigRow.field_values ? ' = ' + sigRow.field_values : '')"></div>
+                        </td>
+                        <td class="py-3 px-3 whitespace-nowrap">
+                          <template x-if="sigRow.policy_override?.status === 'enabled'">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40">
+                              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Enabled in Policy
+                            </span>
+                          </template>
+                          <template x-if="sigRow.policy_override?.status === 'disabled'">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/40">
+                              <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                              Disabled in Policy
+                            </span>
+                          </template>
+                          <template x-if="!sigRow.policy_override || sigRow.policy_override.status === 'default'">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              Default (Signature Set)
+                            </span>
+                          </template>
+                        </td>
+                        <td class="py-3 px-3 text-right whitespace-nowrap">
+                          <div class="inline-flex items-center gap-1.5">
+                            <button @click="tuneSignatureInPolicy(sigRow, true)"
+                                    :disabled="!chTargetPolicy || chTuningInProgress"
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition disabled:opacity-40"
+                                    :class="sigRow.policy_override?.status === 'enabled' ? 'bg-emerald-600 text-white shadow' : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'"
+                                    title="Enable (tighten) this signature_id in the selected WAF policy">
+                              Enable
+                            </button>
+                            <button @click="tuneSignatureInPolicy(sigRow, false)"
+                                    :disabled="!chTargetPolicy || chTuningInProgress"
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition disabled:opacity-40"
+                                    :class="sigRow.policy_override?.status === 'disabled' ? 'bg-rose-600 text-white shadow' : 'bg-rose-500/15 hover:bg-rose-500/30 text-rose-700 dark:text-rose-300 border border-rose-500/30'"
+                                    title="Disable (relax) this signature_id in the selected WAF policy">
+                              Disable
+                            </button>
+                            <template x-if="sigRow.policy_override && sigRow.policy_override.status !== 'default'">
+                              <button @click="tuneSignatureInPolicy(sigRow, null, 'remove')"
+                                      :disabled="!chTargetPolicy || chTuningInProgress"
+                                      class="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-[10px] text-slate-600 dark:text-slate-400 transition"
+                                      title="Remove explicit override from policy.signatures">
+                                Reset
+                              </button>
+                            </template>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <!-- Inspector Fine-Tuning Save & Redis Persistence Bar -->
+            <template x-if="chTargetPolicy">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                <div class="flex items-center gap-2.5 text-slate-700 dark:text-slate-200">
+                  <span class="w-2 h-2 rounded-full" :class="chPolicySavedToRedis ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'"></span>
+                  <div>
+                    <span class="font-bold">Fine-Tuning Target Policy:</span>
+                    <code class="font-mono font-bold text-emerald-700 dark:text-emerald-300 ml-1" x-text="chTargetPolicy"></code>
+                    <span class="text-slate-500 dark:text-slate-400 ml-1.5"
+                          x-text="chPolicySavedToRedis ? '— Saved to Redis (ready to commit to GitHub on the WAF Policies page)' : (chUnsavedTuningCount > 0 ? '— ' + chUnsavedTuningCount + ' signature change(s) applied; click Save to confirm & persist to Redis' : '— Click Save to persist fine-tuned policy to Redis for GitHub commit')"></span>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                  <button @click="saveInspectorFineTuning()"
+                          :disabled="chSavingPolicyToRedis || chTuningInProgress"
+                          class="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition disabled:opacity-50">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                    </svg>
+                    <span x-text="chSavingPolicyToRedis ? 'Saving to Redis...' : 'Save Fine-Tuning to Redis'"></span>
+                  </button>
+                  <button @click="openPolicyFromTuning(chTargetPolicy)"
+                          class="px-3 py-1.5 rounded-xl bg-f5red/15 hover:bg-f5red/25 border border-f5red/30 text-f5red dark:text-rose-300 text-xs font-semibold transition">
+                    Open Policy &rarr;
+                  </button>
+                  <button @click="switchSection('waf'); view = 'list'"
+                          class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
+                          title="Go to WAF Policies page to commit this policy to GitHub">
+                    Go to WAF Policies
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <!-- Expandable All 42 Columns of v4_security_events_signatures_data -->
+            <details class="rounded-xl bg-slate-100/60 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-3 text-xs">
+              <summary class="cursor-pointer font-semibold text-slate-700 dark:text-slate-300">
+                Inspect All 42 Columns of Correlated <code class="font-mono text-purple-600 dark:text-purple-400">v4_security_events_signatures_data</code> Rows
+              </summary>
+              <div class="mt-3 flex flex-col gap-3 max-h-80 overflow-y-auto">
+                <template x-for="(sigRow, sIdx) in (chCorrelatedData.signatures_data || [])" :key="sIdx">
+                  <div class="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                    <div class="font-mono font-bold text-purple-600 dark:text-purple-400 mb-2" x-text="'Row #' + (sIdx + 1) + ' — signature_id: ' + sigRow.signature_id + ' (' + sigRow.signature_name + ')'"></div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px] font-mono">
+                      <template x-for="colName in chSchemaSignaturesColumns" :key="colName">
+                        <div class="p-1.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 truncate">
+                          <span class="text-slate-400" x-text="colName + ': '"></span>
+                          <span class="text-slate-800 dark:text-slate-200 font-semibold" x-text="sigRow[colName] ?? ''"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </details>
+          </div>
+
+          <!-- TAB 2: v4_security_events_violation_data (39 Columns) -->
+          <div x-show="chCorrelationTab === 'violations'" class="flex flex-col gap-3" style="display: none;">
+            <template x-if="(chCorrelatedData.violation_data || []).length === 0">
+              <div class="p-6 text-center rounded-xl bg-slate-100/60 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+                No rows found in <code class="font-mono">v4_security_events_violation_data</code> for <code class="font-mono" x-text="'support_id = ' + chCorrelatedData.support_id"></code>.
+              </div>
+            </template>
+
+            <template x-if="(chCorrelatedData.violation_data || []).length > 0">
+              <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="bg-slate-100 dark:bg-slate-900/90 text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                      <th class="py-2.5 px-3">violations</th>
+                      <th class="py-2.5 px-3">violation_context</th>
+                      <th class="py-2.5 px-3">field_name</th>
+                      <th class="py-2.5 px-3">field_value</th>
+                      <th class="py-2.5 px-3">sub_violations</th>
+                      <th class="py-2.5 px-3">signature_ids / names</th>
+                      <th class="py-2.5 px-3">violation_rating</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 dark:divide-slate-800/70">
+                    <template x-for="(vRow, vIdx) in chCorrelatedData.violation_data" :key="vRow.uuid || vIdx">
+                      <tr class="hover:bg-slate-100/70 dark:hover:bg-slate-800/40 transition">
+                        <td class="py-2.5 px-3 font-semibold text-amber-700 dark:text-amber-300" x-text="vRow.violations || vRow.violation_name || 'N/A'"></td>
+                        <td class="py-2.5 px-3 font-mono text-[11px]" x-text="vRow.violation_context || 'N/A'"></td>
+                        <td class="py-2.5 px-3 font-mono text-[11px]" x-text="vRow.field_name || '—'"></td>
+                        <td class="py-2.5 px-3 font-mono text-[11px] max-w-xs truncate" :title="vRow.field_value" x-text="vRow.field_value || '—'"></td>
+                        <td class="py-2.5 px-3 text-[11px] max-w-xs truncate" :title="vRow.sub_violations" x-text="vRow.sub_violations || 'N/A'"></td>
+                        <td class="py-2.5 px-3 font-mono text-[11px]">
+                          <div class="text-purple-600 dark:text-purple-400" x-text="vRow.signature_ids || 'N/A'"></div>
+                          <div class="text-[10px] text-slate-500 truncate max-w-xs" x-text="vRow.signature_names || ''"></div>
+                        </td>
+                        <td class="py-2.5 px-3 font-mono font-bold" x-text="vRow.violation_rating ?? ''"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <details class="rounded-xl bg-slate-100/60 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-3 text-xs">
+              <summary class="cursor-pointer font-semibold text-slate-700 dark:text-slate-300">
+                Inspect All 39 Columns of Correlated <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events_violation_data</code> Rows
+              </summary>
+              <div class="mt-3 flex flex-col gap-3 max-h-80 overflow-y-auto">
+                <template x-for="(vRow, vIdx) in (chCorrelatedData.violation_data || [])" :key="vIdx">
+                  <div class="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                    <div class="font-mono font-bold text-amber-600 dark:text-amber-400 mb-2" x-text="'Row #' + (vIdx + 1) + ' — ' + (vRow.violations || vRow.violation_name || '') + ' (context: ' + (vRow.violation_context || '') + ')'"></div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px] font-mono">
+                      <template x-for="colName in chSchemaViolationColumns" :key="colName">
+                        <div class="p-1.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 truncate">
+                          <span class="text-slate-400" x-text="colName + ': '"></span>
+                          <span class="text-slate-800 dark:text-slate-200 font-semibold" x-text="vRow[colName] ?? ''"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </details>
+          </div>
+
+          <!-- TAB 3: v4_security_events Full 53-Column Inspector & Raw HTTP Request -->
+          <div x-show="chCorrelationTab === 'event_details'" class="flex flex-col gap-4" style="display: none;">
+            <template x-for="(evRow, eIdx) in (chCorrelatedData.security_events || [])" :key="evRow.event_uuid || evRow.uuid || eIdx">
+              <div class="flex flex-col gap-4">
+                <!-- Raw HTTP Request Viewer -->
+                <div class="rounded-xl bg-slate-950 border border-slate-800 p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-mono uppercase tracking-wider text-amber-400 font-bold">Raw HTTP Request Payload (<code class="font-mono">request</code> column)</span>
+                    <span class="text-[11px] font-mono text-slate-400" x-text="'is_truncated: ' + (evRow.is_truncated_Values || evRow.is_truncated || 'false')"></span>
+                  </div>
+                  <pre class="text-xs font-mono text-emerald-300 whitespace-pre-wrap overflow-x-auto max-h-56" x-text="formatRawHttpRequest(evRow.request)"></pre>
+                </div>
+
+                <!-- All 53 Fields Grid with One-Click Filter Addition -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-96 overflow-y-auto p-1">
+                  <template x-for="col in chSchemaEventsColumns" :key="col.name">
+                    <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-2 group">
+                      <div class="min-w-0 flex-1">
+                        <div class="text-[10px] font-mono text-slate-400 flex items-center gap-1.5">
+                          <span class="font-bold text-slate-600 dark:text-slate-300" x-text="col.name"></span>
+                          <span class="px-1 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-[9px]" x-text="col.category"></span>
+                        </div>
+                        <div class="text-xs font-mono text-slate-900 dark:text-white break-all mt-0.5" x-text="evRow[col.name] !== undefined && evRow[col.name] !== '' ? evRow[col.name] : '—'"></div>
+                      </div>
+                      <button @click="addQuickFieldFilterFromCell(col.name, evRow[col.name])"
+                              class="opacity-0 group-hover:opacity-100 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/30 text-amber-600 dark:text-amber-300 text-[10px] font-semibold transition shrink-0"
+                              title="Filter v4_security_events by this field value">
+                        + Filter
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- 4. FILTERED v4_security_events RESULTS TABLE -->
+      <div class="glass-panel rounded-2xl border overflow-hidden shadow-xl flex flex-col">
+        <!-- Table Header & Pagination Controls -->
+        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-100/50 dark:bg-slate-900/50">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-800 dark:text-slate-200">
+              <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events</code> Results
+            </span>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  x-text="chTotalEvents + ' matching events'">0 matching events</span>
+            <span class="text-[11px] text-slate-500 hidden sm:inline">
+              (Click any row or <strong>Correlate &amp; Tune</strong> to join all 3 tables by <code class="font-mono">support_id</code>)
+            </span>
+          </div>
+
+          <div class="flex items-center gap-2 text-xs">
+            <label class="text-slate-500 text-[11px]">Rows:</label>
+            <select x-model.number="chLimit" @change="searchClickHouseEvents(true)"
+                    class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono">
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+              <option :value="200">200</option>
+            </select>
+            <button @click="chPrevPage()"
+                    :disabled="chOffset <= 0 || chLoading"
+                    class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-40 font-semibold transition">
+              &larr; Prev
+            </button>
+            <span class="font-mono text-[11px] text-slate-600 dark:text-slate-400"
+                  x-text="chTotalEvents > 0 ? ((chOffset + 1) + '-' + Math.min(chOffset + chEvents.length, chTotalEvents) + ' of ' + chTotalEvents) : '0 of 0'"></span>
+            <button @click="chNextPage()"
+                    :disabled="chOffset + chLimit >= chTotalEvents || chLoading"
+                    class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-40 font-semibold transition">
+              Next &rarr;
+            </button>
+          </div>
+        </div>
+
+        <!-- Results Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-100/90 dark:bg-slate-900/90 text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                <th class="py-2.5 px-3 sticky left-0 bg-slate-100 dark:bg-slate-900 z-10">Correlate &amp; Tune</th>
+                <template x-for="colName in chVisibleColumns" :key="colName">
+                  <th class="py-2.5 px-3 cursor-pointer hover:text-amber-500 whitespace-nowrap select-none"
+                      @click="toggleChSort(colName)">
+                    <div class="flex items-center gap-1">
+                      <span x-text="colName"></span>
+                      <span x-show="chSortBy === colName" x-text="chSortOrder === 'ASC' ? '▲' : '▼'" class="text-amber-500"></span>
+                    </div>
+                  </th>
+                </template>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-800/70">
+              <template x-if="chLoading">
+                <tr>
+                  <td :colspan="chVisibleColumns.length + 1" class="py-12 text-center text-slate-400">
+                    <div class="inline-flex items-center gap-2 text-xs font-semibold">
+                      <svg class="w-4 h-4 animate-spin text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                      Querying ClickHouse <code class="font-mono">v4_security_events</code>...
+                    </div>
+                  </td>
+                </tr>
+              </template>
+
+              <template x-if="!chLoading && chEvents.length === 0">
+                <tr>
+                  <td :colspan="chVisibleColumns.length + 1" class="py-12 text-center text-slate-500">
+                    <div class="max-w-md mx-auto flex flex-col items-center gap-2">
+                      <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">No security violation events to display</span>
+                      <span class="text-xs text-slate-500" x-text="chStatus.configured ? 'Adjust your search filters or click Refresh Logs to query ClickHouse.' : 'Click Configure ClickHouse to connect to your NGINX Instance Manager ClickHouse database.'"></span>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+
+              <template x-for="(ev, rowIdx) in chEvents" :key="ev.event_uuid || ev.uuid || (ev.support_id + '-' + rowIdx)">
+                <tr @click="correlateClickHouseEvent(ev.support_id, ev)"
+                    class="cursor-pointer transition"
+                    :class="chSelectedSupportId === String(ev.support_id) ? 'bg-amber-500/15 dark:bg-amber-500/20' : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/50'">
+                  <td class="py-2.5 px-3 whitespace-nowrap sticky left-0 bg-white/95 dark:bg-slate-900/95 z-10 border-r border-slate-200 dark:border-slate-800">
+                    <button @click.stop="correlateClickHouseEvent(ev.support_id, ev)"
+                            class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1.5"
+                            :class="chSelectedSupportId === String(ev.support_id) ? 'bg-amber-600 text-white shadow' : 'bg-amber-500/15 hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-500/30'">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                      <span>Correlate &amp; Tune</span>
+                    </button>
+                  </td>
+                  <template x-for="colName in chVisibleColumns" :key="colName">
+                    <td class="py-2.5 px-3 font-mono text-[11px] whitespace-nowrap max-w-xs truncate" :title="String(ev[colName] ?? '')">
+                      <template x-if="colName === 'support_id'">
+                        <span class="font-bold text-amber-600 dark:text-amber-400 underline decoration-dotted" x-text="ev.support_id"></span>
+                      </template>
+                      <template x-if="colName === 'request_status'">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                              :class="(ev.request_status || '').toLowerCase() === 'blocked' ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'"
+                              x-text="ev.request_status || 'N/A'"></span>
+                      </template>
+                      <template x-if="colName === 'severity'">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                              :class="{
+                                'bg-rose-500/20 text-rose-700 dark:text-rose-300': (ev.severity || '').toLowerCase() === 'critical' || (ev.severity || '').toLowerCase() === 'error',
+                                'bg-amber-500/20 text-amber-700 dark:text-amber-300': (ev.severity || '').toLowerCase() === 'warning',
+                                'bg-sky-500/20 text-sky-700 dark:text-sky-300': (ev.severity || '').toLowerCase() === 'notice' || (ev.severity || '').toLowerCase() === 'informational'
+                              }"
+                              x-text="ev.severity || 'N/A'"></span>
+                      </template>
+                      <template x-if="colName === 'signature_ids'">
+                        <span class="text-purple-600 dark:text-purple-400 font-semibold" x-text="ev.signature_ids || 'N/A'"></span>
+                      </template>
+                      <template x-if="colName !== 'support_id' && colName !== 'request_status' && colName !== 'severity' && colName !== 'signature_ids'">
+                        <span x-text="ev[colName] !== undefined && ev[colName] !== null ? ev[colName] : ''"></span>
+                      </template>
+                    </td>
+                  </template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- SECTION D: CONFIGURATION (REDIS, GITHUB, CLICKHOUSE)                      -->
+  <!-- ========================================================================= -->
+  <div x-show="activeSection === 'configuration'" class="flex-1 min-h-0 flex flex-col" style="display: none;">
+    <main class="max-w-[1720px] 2xl:max-w-[1850px] w-full mx-auto p-4 sm:p-6 flex flex-col gap-6">
+
+      <!-- Configuration Hero & Status Overview -->
+      <div class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-xl">
+        <div class="flex items-start sm:items-center gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-sky-600 flex items-center justify-center shadow-lg shadow-indigo-600/25 shrink-0">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white">System Configuration &amp; Integrations</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Manage connection settings for <strong>Redis</strong> (policy key-value store &amp; persistent settings), <strong>GitHub</strong> (GitOps repository synchronization), and <strong>ClickHouse</strong> (NGINX Instance Manager WAF violation logs).
+            </p>
+          </div>
+        </div>
+
+        <!-- Status Summary Pills -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <div class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2"
+               :class="storageHealth.connected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : (storageHealth.backend === 'in_memory' ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300')">
+            <span class="w-2 h-2 rounded-full"
+                  :class="storageHealth.connected ? 'bg-emerald-500 animate-pulse' : (storageHealth.backend === 'in_memory' ? 'bg-amber-500' : 'bg-rose-500')"></span>
+            <span>Storage:</span>
+            <strong class="uppercase" x-text="storageHealth.backend === 'github' ? 'GitHub' : (storageHealth.backend === 'redis' ? 'Redis' : 'In-Memory')"></strong>
+          </div>
+
+          <div class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2"
+               :class="(storageHealth.github_configured || storageHealth.github?.connected) ? 'bg-slate-200/80 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'">
+            <span class="w-2 h-2 rounded-full" :class="(storageHealth.github_configured || storageHealth.github?.connected) ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+            <span>GitHub:</span>
+            <strong x-text="(storageHealth.github_configured || storageHealth.github?.connected) ? ((storageHealth.github?.owner || githubForm.owner) + '/' + (storageHealth.github?.repo || githubForm.repo)) : 'Not Configured'"></strong>
+          </div>
+
+          <div class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2"
+               :class="chStatus.connected && chStatus.configured ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'">
+            <span class="w-2 h-2 rounded-full" :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500 animate-pulse' : (chStatus.configured ? 'bg-rose-500' : 'bg-slate-400')"></span>
+            <span>ClickHouse:</span>
+            <strong x-text="chStatus.configured ? ((chStatus.config?.host || '') + ':' + (chStatus.config?.port || 8123)) : 'Not Configured'"></strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3-Column Configuration Grid: Redis, GitHub, ClickHouse -->
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+
+        <!-- =============================================================== -->
+        <!-- CARD 1: REDIS & LOCAL STORAGE CONFIGURATION                     -->
+        <!-- =============================================================== -->
+        <div id="config-card-redis" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Redis &amp; Storage Mode</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">Primary key-value store &amp; persistent settings</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase"
+                  :class="storageHealth.backend === 'redis' && storageHealth.connected ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : (storageHealth.backend === 'in_memory' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400')"
+                  x-text="storageHealth.backend === 'redis' ? (storageHealth.connected ? 'Active (' + (storageHealth.latency_ms || 0) + 'ms)' : 'Disconnected') : (storageHealth.backend === 'in_memory' ? 'In-Memory Active' : 'Standby')"></span>
+          </div>
+
+          <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            Configure the Redis instance used to store WAF policies, logging profiles, custom signature sets, and persistent ClickHouse &amp; GitHub credentials across container restarts.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Redis Host</label>
+              <input type="text" x-model="redisForm.host" placeholder="localhost or redis"
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Redis Port</label>
+              <input type="number" x-model.number="redisForm.port" placeholder="6379"
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">DB Index</label>
+              <input type="number" x-model.number="redisForm.db" placeholder="0"
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Password</label>
+              <input type="password" x-model="redisForm.password" placeholder="Optional"
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input type="checkbox" x-model="redisForm.force_memory" id="force_mem" class="rounded text-emerald-600">
+            <label for="force_mem" class="text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Force In-Memory Fallback (Skip Redis)</label>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" @click="switchToMemoryBackend()" :disabled="loading"
+                    class="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-semibold transition disabled:opacity-50"
+                    title="Use volatile RAM storage without Redis or GitHub">
+              Use In-Memory Mode
+            </button>
+            <button type="button" @click="applyRedisConfig()" :disabled="loading"
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/20 transition disabled:opacity-50">
+              Connect &amp; Switch to Redis
+            </button>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- CARD 2: GITHUB (GITOPS) REPOSITORY CONFIGURATION                -->
+        <!-- =============================================================== -->
+        <div id="config-card-github" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center shadow-md">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">GitHub (GitOps) Settings</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">Version-controlled WAF policies &amp; Git synchronization</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase"
+                  :class="(storageHealth.backend === 'github' && storageHealth.connected) || storageHealth.github_configured || storageHealth.github?.connected ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'"
+                  x-text="storageHealth.backend === 'github' ? 'Primary Backend' : ((storageHealth.github_configured || storageHealth.github?.connected) ? 'GitOps Linked' : 'Not Configured')"></span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Organization or User *</label>
+              <input type="text" x-model="githubForm.owner" placeholder="e.g. f5-corp or username"
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Repository Name *</label>
+              <input type="text" x-model="githubForm.repo" placeholder="e.g. nginx-waf-policies"
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">Personal Access Token (PAT) *</label>
+              <span class="text-[10px] text-slate-500 font-mono">Requires 'repo' scope</span>
+            </div>
+            <div class="relative">
+              <input :type="githubForm.showToken ? 'text' : 'password'" x-model="githubForm.token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx or github_pat_..."
+                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-3 pr-10 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
+              <button type="button" @click="githubForm.showToken = !githubForm.showToken"
+                      class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <template x-if="!githubForm.showToken">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </template>
+                <template x-if="githubForm.showToken">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path></svg>
+                </template>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Git Branch</label>
+            <input type="text" x-model="githubForm.branch" placeholder="main"
+                   class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
+          </div>
+
+          <!-- Advanced GitHub Repository & Path Settings -->
+          <div>
+            <button type="button" @click="githubForm.showAdvanced = !githubForm.showAdvanced"
+                    class="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+              <span x-text="githubForm.showAdvanced ? '▼' : '►'"></span>
+              <span>Advanced Repository &amp; Path Settings</span>
+              <span x-show="githubForm.disable_ssl_verify" class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">SSL Verify Disabled</span>
+            </button>
+
+            <div x-show="githubForm.showAdvanced" class="mt-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">GitHub API Base URL</label>
+                <input type="text" x-model="githubForm.api_url" placeholder="https://api.github.com"
+                       class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
+                <p class="text-[10px] text-slate-500 mt-0.5">Use default for github.com or custom URL for GitHub Enterprise Server (e.g. <code>https://ghes.example.com/api/v3</code>).</p>
+              </div>
+
+              <div @click="githubForm.disable_ssl_verify = !githubForm.disable_ssl_verify"
+                   class="sm:col-span-2 flex items-center justify-between p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/20 text-xs cursor-pointer select-none transition">
+                <div class="flex items-center gap-2.5">
+                  <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold text-slate-800 dark:text-slate-200">Disable Server Certificate Verification</span>
+                      <span x-show="githubForm.disable_ssl_verify" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/40">Active</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 dark:text-slate-400">Allow self-signed certificates or private GitHub Enterprise instances</div>
+                  </div>
+                </div>
+                <button type="button"
+                        role="switch"
+                        :aria-checked="githubForm.disable_ssl_verify"
+                        @click.stop="githubForm.disable_ssl_verify = !githubForm.disable_ssl_verify"
+                        class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ml-3"
+                        :class="githubForm.disable_ssl_verify ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-700'">
+                  <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                        :class="githubForm.disable_ssl_verify ? 'translate-x-4' : 'translate-x-0'"></span>
+                </button>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Policies Directory</label>
+                <input type="text" x-model="githubForm.policies_path" placeholder="policies"
+                       class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Log Profiles Directory</label>
+                <input type="text" x-model="githubForm.log_profiles_path" placeholder="log-profiles"
+                       class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Custom Signatures Directory</label>
+                <input type="text" x-model="githubForm.custom_sigs_path" placeholder="custom-signatures"
+                       class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <button x-show="storageHealth.github_configured || storageHealth.github?.connected"
+                    type="button"
+                    @click="pullFromGitHub()"
+                    :disabled="githubPulling"
+                    class="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition disabled:opacity-50">
+              <span x-text="githubPulling ? 'Pulling...' : 'Pull from GitHub'"></span>
+            </button>
+            <button type="button" @click="applyGitHubConfig()" :disabled="loading"
+                    class="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 text-xs font-bold shadow-md transition disabled:opacity-50">
+              <template x-if="loading">
+                <span class="w-3.5 h-3.5 border-2 border-white dark:border-slate-900 border-t-transparent rounded-full animate-spin"></span>
+              </template>
+              <span>Connect &amp; Save GitHub</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- CARD 3: CLICKHOUSE DATABASE CONFIGURATION (NIM)                 -->
+        <!-- =============================================================== -->
+        <div id="config-card-clickhouse" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">ClickHouse Database Settings</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">NGINX Instance Manager Security Monitoring (Persisted in Redis)</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase"
+                  :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : (chStatus.configured ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400')"
+                  x-text="chStatus.connected && chStatus.configured ? ('Connected (' + (chStatus.database || 'nms') + ')') : (chStatus.configured ? 'Error' : 'Not Configured')"></span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">ClickHouse IP Address / Hostname *</label>
+              <input type="text" x-model="chConfigForm.host" placeholder="e.g. 10.1.1.50 or nim-clickhouse.internal"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">HTTP(S) Port *</label>
+              <input type="number" x-model.number="chConfigForm.port" placeholder="8123"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Username</label>
+              <input type="text" x-model="chConfigForm.username" placeholder="default"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Password
+                <span x-show="chStatus.config?.has_password" class="text-[10px] font-normal text-emerald-500">(saved in Redis)</span>
+              </label>
+              <input type="password" x-model="chConfigForm.password" placeholder="Leave blank to keep saved password"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Database Name</label>
+              <input type="text" x-model="chConfigForm.database" placeholder="nms (auto-detects nms / default)"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+            </div>
+            <div class="flex flex-col gap-2 pt-4">
+              <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input type="checkbox" x-model="chConfigForm.ssl" class="rounded border-slate-400 text-amber-600 focus:ring-amber-500">
+                <span>Use HTTPS / TLS</span>
+              </label>
+              <label x-show="chConfigForm.ssl" class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input type="checkbox" x-model="chConfigForm.verify_ssl" class="rounded border-slate-400 text-amber-600 focus:ring-amber-500">
+                <span>Verify TLS Certificate</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Connection Test / Save Result Banner -->
+          <template x-if="chTestResult || chModalError || chModalSuccess">
+            <div class="p-3 rounded-xl border text-xs font-mono"
+                 :class="(chTestResult?.connected || chModalSuccess) && !chModalError ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'">
+              <div class="font-bold"
+                   x-text="chModalError ? ('Connection Failed: ' + chModalError) : (chModalSuccess || (chTestResult?.connected ? ('Connected to ClickHouse v' + (chTestResult.version || '') + ' (DB: ' + (chTestResult.database || '') + ')') : ('Connection Failed: ' + (chTestResult?.error || 'Unknown error'))))"></div>
+              <template x-if="chTestResult?.connected && chTestResult?.tables">
+                <div class="mt-1 text-[11px]">
+                  Tables detected:
+                  <span x-text="Object.entries(chTestResult.tables).map(([k, v]) => k + ' (' + ((v && typeof v === 'object' ? v.row_count : v) ?? 0) + ' rows)').join(', ') || 'None'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <button @click="testClickHouseConnection()"
+                    :disabled="chTesting || !chConfigForm.host"
+                    class="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition disabled:opacity-40">
+              <span x-text="chTesting ? 'Testing...' : 'Test Connection'"></span>
+            </button>
+            <button @click="saveClickHouseConfig()"
+                    :disabled="chSaving || !chConfigForm.host"
+                    class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-lg shadow-amber-600/20 transition disabled:opacity-40">
+              <span x-text="chSaving ? 'Saving to Redis...' : 'Save &amp; Persist in Redis'"></span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
   <!-- MODALS: WAF POLICIES                                                      -->
   <!-- ========================================================================= -->
 
@@ -5330,280 +6532,6 @@
         <button @click="showDeleteModal = false" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300">Cancel</button>
         <button @click="deletePolicy()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-bold text-white">Delete Permanently</button>
       </div>
-    </div>
-  </div>
-
-  <!-- 4. STORAGE BACKEND CONFIG MODAL (GITHUB & REDIS) -->
-  <div x-show="showStorageModal || showRedisModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" style="display: none;">
-    <div class="glass-panel w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col gap-4 shadow-2xl bg-white dark:bg-slate-900">
-      
-      <!-- Modal Header -->
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center shadow-md">
-            <template x-if="storageBackendTab === 'github'">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
-              </svg>
-            </template>
-            <template x-if="storageBackendTab === 'redis'">
-              <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
-              </svg>
-            </template>
-            <template x-if="storageBackendTab === 'memory'">
-              <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
-              </svg>
-            </template>
-          </div>
-          <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white">Storage Backend Settings</h3>
-            <p class="text-xs text-slate-500">Configure where F5 WAF for NGINX policies, log profiles, and signatures are stored.</p>
-          </div>
-        </div>
-        <button @click="closeStorageModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none">&times;</button>
-      </div>
-
-      <!-- Current Backend Status Banner -->
-      <div class="px-3.5 py-2.5 rounded-xl border flex items-center justify-between text-xs"
-           :class="{
-             'bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700': storageHealth.backend === 'github',
-             'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/40': storageHealth.backend === 'redis',
-             'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/40': storageHealth.backend === 'in_memory'
-           }">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full"
-                :class="storageHealth.connected ? 'bg-emerald-500 animate-pulse' : (storageHealth.backend === 'in_memory' ? 'bg-amber-500' : 'bg-rose-500')"></span>
-          <span class="font-semibold text-slate-700 dark:text-slate-200">Active Backend:</span>
-          <span class="font-mono uppercase font-bold text-[11px]"
-                :class="{
-                  'text-slate-900 dark:text-white': storageHealth.backend === 'github',
-                  'text-emerald-700 dark:text-emerald-400': storageHealth.backend === 'redis',
-                  'text-amber-700 dark:text-amber-400': storageHealth.backend === 'in_memory'
-                }"
-                x-text="storageHealth.backend === 'github' ? 'GitHub (GitOps)' : (storageHealth.backend === 'redis' ? 'Redis Key-Value' : 'In-Memory')"></span>
-        </div>
-        <div class="text-[11px] font-mono text-slate-500">
-          <span x-show="storageHealth.backend === 'github'" x-text="storageHealth.owner + '/' + storageHealth.repo + ' (' + storageHealth.branch + ')'"></span>
-          <span x-show="storageHealth.backend === 'redis'" x-text="storageHealth.host + ':' + storageHealth.port"></span>
-          <span x-show="storageHealth.backend === 'in_memory'">Volatile / Ephemeral</span>
-        </div>
-      </div>
-
-      <!-- Storage Backend Tabs -->
-      <div class="flex items-center border-b border-slate-200 dark:border-slate-800 gap-2">
-        <button type="button" @click="storageBackendTab = 'github'"
-                class="flex items-center gap-2 py-2 px-3 text-xs font-semibold border-b-2 transition"
-                :class="storageBackendTab === 'github' ? 'border-slate-900 dark:border-white text-slate-900 dark:text-white' : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'">
-          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
-          </svg>
-          GitHub (GitOps)
-        </button>
-        <button type="button" @click="storageBackendTab = 'redis'"
-                class="flex items-center gap-2 py-2 px-3 text-xs font-semibold border-b-2 transition"
-                :class="storageBackendTab === 'redis' ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
-          </svg>
-          Redis (Key-Value)
-        </button>
-        <button type="button" @click="storageBackendTab = 'memory'"
-                class="flex items-center gap-2 py-2 px-3 text-xs font-semibold border-b-2 transition"
-                :class="storageBackendTab === 'memory' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
-          </svg>
-          In-Memory
-        </button>
-      </div>
-
-      <!-- TAB 1: GITHUB GITOPS FORM -->
-      <div x-show="storageBackendTab === 'github'" class="flex flex-col gap-3.5">
-        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300">
-          <p class="leading-relaxed">
-            Store JSON policies and logging profiles in your GitHub repository. The UI displays existing files, and saving any policy automatically creates a <strong>Git commit</strong> with complete audit history.
-          </p>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <!-- Owner / Organization -->
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Organization or User *</label>
-            <input type="text" x-model="githubForm.owner" placeholder="e.g. f5-corp or username"
-                   class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
-          </div>
-
-          <!-- Repository Name -->
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Repository Name *</label>
-            <input type="text" x-model="githubForm.repo" placeholder="e.g. nginx-waf-policies"
-                   class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
-          </div>
-        </div>
-
-        <!-- Personal Access Token (PAT) -->
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">Personal Access Token (PAT) *</label>
-            <span class="text-[10px] text-slate-500 font-mono">Requires 'repo' scope</span>
-          </div>
-          <div class="relative">
-            <input :type="githubForm.showToken ? 'text' : 'password'" x-model="githubForm.token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx or github_pat_..."
-                   class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-3 pr-10 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
-            <button type="button" @click="githubForm.showToken = !githubForm.showToken"
-                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-              <template x-if="!githubForm.showToken">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-              </template>
-              <template x-if="githubForm.showToken">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path></svg>
-              </template>
-            </button>
-          </div>
-        </div>
-
-        <!-- Target Branch -->
-        <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Git Branch</label>
-          <input type="text" x-model="githubForm.branch" placeholder="main"
-                 class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400">
-        </div>
-
-        <!-- Advanced Toggle -->
-        <div>
-          <button type="button" @click="githubForm.showAdvanced = !githubForm.showAdvanced"
-                  class="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
-            <span x-text="githubForm.showAdvanced ? '▼' : '►'"></span>
-            <span>Advanced Repository & Path Settings</span>
-            <span x-show="githubForm.disable_ssl_verify" class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">SSL Verify Disabled</span>
-          </button>
-
-          <div x-show="githubForm.showAdvanced" class="mt-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="sm:col-span-2">
-              <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">GitHub API Base URL</label>
-              <input type="text" x-model="githubForm.api_url" placeholder="https://api.github.com"
-                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
-              <p class="text-[10px] text-slate-500 mt-0.5">Use default for github.com or custom URL for GitHub Enterprise Server (e.g. <code>https://ghes.example.com/api/v3</code>).</p>
-            </div>
-
-            <!-- Disable Server Certificate Verification Toggle (Self-Signed / Private Enterprise) -->
-            <div @click="githubForm.disable_ssl_verify = !githubForm.disable_ssl_verify"
-                 class="sm:col-span-2 flex items-center justify-between p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/20 text-xs cursor-pointer select-none transition">
-              <div class="flex items-center gap-2.5">
-                <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-semibold text-slate-800 dark:text-slate-200">Disable Server Certificate Verification</span>
-                    <span x-show="githubForm.disable_ssl_verify" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/40">Active</span>
-                  </div>
-                  <div class="text-[11px] text-slate-500 dark:text-slate-400">Allow self-signed certificates or private GitHub Enterprise instances without TLS/SSL verification</div>
-                </div>
-              </div>
-              <button type="button"
-                      role="switch"
-                      :aria-checked="githubForm.disable_ssl_verify"
-                      @click.stop="githubForm.disable_ssl_verify = !githubForm.disable_ssl_verify"
-                      class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ml-3"
-                      :class="githubForm.disable_ssl_verify ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-700'">
-                <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                      :class="githubForm.disable_ssl_verify ? 'translate-x-4' : 'translate-x-0'"></span>
-              </button>
-            </div>
-
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Policies Directory</label>
-              <input type="text" x-model="githubForm.policies_path" placeholder="policies"
-                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
-            </div>
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Log Profiles Directory</label>
-              <input type="text" x-model="githubForm.log_profiles_path" placeholder="log-profiles"
-                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
-            </div>
-            <div class="sm:col-span-2">
-              <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Custom Signatures Directory</label>
-              <input type="text" x-model="githubForm.custom_sigs_path" placeholder="custom-signatures"
-                     class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200">
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-          <button type="button" @click="closeStorageModal()"
-                  class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition">
-            Cancel
-          </button>
-          <button type="button" @click="applyGitHubConfig()" :disabled="loading"
-                  class="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 text-xs font-bold shadow-md transition disabled:opacity-50">
-            <template x-if="loading">
-              <span class="w-3.5 h-3.5 border-2 border-white dark:border-slate-900 border-t-transparent rounded-full animate-spin"></span>
-            </template>
-            <span>Connect & Switch to GitHub</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- TAB 2: REDIS KEY-VALUE FORM -->
-      <div x-show="storageBackendTab === 'redis'" class="flex flex-col gap-3.5">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Redis Host</label>
-            <input type="text" x-model="redisForm.host" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Redis Port</label>
-            <input type="number" x-model.number="redisForm.port" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">DB Index</label>
-            <input type="number" x-model.number="redisForm.db" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Password</label>
-            <input type="password" x-model="redisForm.password" placeholder="Optional" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-200">
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 mt-1">
-          <input type="checkbox" x-model="redisForm.force_memory" id="force_mem" class="rounded text-emerald-600">
-          <label for="force_mem" class="text-xs text-slate-700 dark:text-slate-300">Force In-Memory Fallback (Skip Redis)</label>
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-          <button type="button" @click="closeStorageModal()"
-                  class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition">
-            Cancel
-          </button>
-          <button type="button" @click="applyRedisConfig()" :disabled="loading"
-                  class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition disabled:opacity-50">
-            Connect & Switch to Redis
-          </button>
-        </div>
-      </div>
-
-      <!-- TAB 3: IN-MEMORY STORAGE FORM -->
-      <div x-show="storageBackendTab === 'memory'" class="flex flex-col gap-3.5">
-        <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
-          <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-          <p class="leading-relaxed">
-            In-Memory storage requires no external services (neither Redis nor GitHub). Policies and log profiles are kept in server RAM. Any changes will be reset when the server restarts. Useful for offline testing or demo sessions.
-          </p>
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-          <button type="button" @click="closeStorageModal()"
-                  class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition">
-            Cancel
-          </button>
-          <button type="button" @click="switchToMemoryBackend()" :disabled="loading"
-                  class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow-md shadow-amber-600/20 transition disabled:opacity-50">
-            Switch to In-Memory Mode
-          </button>
-        </div>
-      </div>
-
     </div>
   </div>
 

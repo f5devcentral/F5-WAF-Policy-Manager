@@ -22,5 +22,14 @@ data:
   {{- if or .Values.apcompile.enabled .Values.config.compilerServiceUrl }}
   COMPILER_SERVICE_URL: {{ include "f5-waf-policy-manager.compilerServiceUrl" . | quote }}
   {{- end }}
+  {{- if .Values.clickhouse }}
+  CLICKHOUSE_HOST: {{ .Values.clickhouse.host | default "" | quote }}
+  CLICKHOUSE_PORT: {{ .Values.clickhouse.port | default 8123 | quote }}
+  CLICKHOUSE_USER: {{ .Values.clickhouse.username | default "default" | quote }}
+  CLICKHOUSE_DATABASE: {{ .Values.clickhouse.database | default "nms" | quote }}
+  CLICKHOUSE_SSL: {{ .Values.clickhouse.ssl | default false | quote }}
+  CLICKHOUSE_VERIFY_SSL: {{ .Values.clickhouse.verifySsl | default false | quote }}
+  {{- end }}
+
 
 

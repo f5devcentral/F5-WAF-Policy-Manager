@@ -10,6 +10,7 @@ Welcome to the visual walkthrough of **F5 WAF for NGINX Policy & Logging Profile
 3. [Logging Profiles Management & SIEM Formats](#3-logging-profiles-management--siem-formats)
 4. [Official Policy Compilation & Bundle Verification (`apcompile`)](#4-official-policy-compilation--bundle-verification-apcompile)
 5. [GitOps Synchronization, Conflict Resolution & Verbose Commits](#5-gitops-synchronization-conflict-resolution--verbose-commits)
+6. [ClickHouse Security Log Violations & WAF Policy Fine-Tuning](#6-clickhouse-security-log-violations--waf-policy-fine-tuning)
 
 ---
 
@@ -118,3 +119,34 @@ Adopt true Infrastructure-as-Code (IaC) and DevSecOps workflows by keeping your 
     - **Overwrite with GitHub Copy**: Reset to remote version.
 - **Direct GitHub REST Integration**:
   - Communicates directly via authenticated GitHub API (`httpx`) supporting custom branches, personal access tokens, and private repositories.
+
+---
+
+## 6. ClickHouse Security Log Violations & WAF Policy Fine-Tuning
+
+The **Violation Logs & Tuning** dashboard connects directly to the remote **ClickHouse** database inside **NGINX Instance Manager (NIM)** to search security violations, correlate event tables by `support_id`, and fine-tune WAF policies (`signature_id` tightening or relaxation).
+
+### Step-by-Step Workflow:
+1. **Configure & Persist ClickHouse Connection**:
+   - Click the **ClickHouse** status badge in the top navigation bar or **ClickHouse Settings** in the **Violation Logs & Tuning** view.
+   - Enter the remote NGINX Instance Manager ClickHouse IP/Hostname (`host`), HTTP port (`8123`), `username`, `password`, and `database` (default `nms`).
+   - Click **Test Connection** to verify connectivity and inspect the status of the 3 security log tables, then click **Save & Persist in Redis**.
+   - Connection credentials are saved under `waf:policy:__clickhouse__:config` in Redis so they automatically persist across container restarts and server reboots.
+2. **Search & Filter Across All 53 Fields of `v4_security_events`**:
+   - Use the **Global Search** bar or add multi-condition field filters across **any of the 53 columns** in `v4_security_events` (e.g., `support_id`, `policy_name`, `http__uri`, `http__remote_addr`, `severity`, `request_status`, `violation_rating`, `violations`, `sub_violations`, `signature_ids`, `bot_signature_name`, `request`, `is_truncated`).
+   - Use quick filter presets (`Blocked Only`, `Critical Severity`, `Attack Signatures`, `Untrusted Bots`) to immediately surface high-priority security events.
+3. **Correlate All 3 Tables by `support_id`**:
+   - Click **Correlate & Tune** on any security event row (e.g. `support_id = 10134279319999872904`).
+   - The correlation drawer queries all 3 ClickHouse tables using `support_id` as the join key and presents them in 4 dedicated tabs:
+     - **Signature Fine-Tuning (`v4_security_events_signatures_data`)**: Lists every triggered `signature_id` with its `signature_name`, `signature_accuracy`, `signature_risk`, `blocking_mask`, matched `buffer` (`offset` / `length`), and `violation_contexts`.
+     - **Violation Data (`v4_security_events_violation_data` — 39 fields)**: Shows all correlated violation and sub-violation rows, contexts, blocking masks, and field names/values.
+     - **Full Event & HTTP Request (`v4_security_events` — 53 fields)**: Displays the raw HTTP request payload, XML `violation_details`, and a searchable 53-field inspector.
+     - **Correlated SQL Queries**: Displays the exact parameterized ClickHouse SQL queries executed for full transparency.
+4. **Tighten or Relax Signatures in Your WAF Policy (`signature_id`)**:
+   - Select the target WAF policy (automatically matched from the event's `policy_name` when present in storage).
+   - For any triggered `signature_id` (e.g. `200010468` — `"/etc/passwd" access (URI)` or `200003056` — `"/etc" execution attempt (URI)`):
+     - Click **Enable (Tighten)** to set `{"signatureId": 200010468, "enabled": true}` in `policy.signatures`.
+     - Click **Disable (Relax)** to set `{"signatureId": 200010468, "enabled": false}` in `policy.signatures` (suppressing false positives).
+     - Click **Reset** to remove the explicit override and revert to policy signature set defaults.
+   - Use **Enable All Signatures (Tighten)** or **Disable All Signatures (Relax)** for one-click bulk tuning, or click **Open Target Policy in Editor** to immediately inspect the diff, compile with `apcompile`, or commit to GitHub.
+
