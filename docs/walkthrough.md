@@ -126,27 +126,22 @@ Adopt true Infrastructure-as-Code (IaC) and DevSecOps workflows by keeping your 
 
 The **Violation Logs & Tuning** dashboard connects directly to the remote **ClickHouse** database inside **NGINX Instance Manager (NIM)** to search security violations, correlate event tables by `support_id`, and fine-tune WAF policies (`signature_id` tightening or relaxation).
 
-### Step-by-Step Workflow:
-1. **Configure & Persist ClickHouse Connection**:
-   - Click the **ClickHouse** status badge in the top navigation bar or **ClickHouse Settings** in the **Violation Logs & Tuning** view.
-   - Enter the remote NGINX Instance Manager ClickHouse IP/Hostname (`host`), HTTP port (`8123`), `username`, `password`, and `database` (default `nms`).
-   - Click **Test Connection** to verify connectivity and inspect the status of the 3 security log tables, then click **Save & Persist in Redis**.
-   - Connection credentials are saved under `waf:policy:__clickhouse__:config` in Redis so they automatically persist across container restarts and server reboots.
-2. **Search & Filter Across All 53 Fields of `v4_security_events`**:
-   - Use the **Global Search** bar or add multi-condition field filters across **any of the 53 columns** in `v4_security_events` (e.g., `support_id`, `policy_name`, `http__uri`, `http__remote_addr`, `severity`, `request_status`, `violation_rating`, `violations`, `sub_violations`, `signature_ids`, `bot_signature_name`, `request`, `is_truncated`).
-   - Use quick filter presets (`Blocked Only`, `Critical Severity`, `Attack Signatures`, `Untrusted Bots`) to immediately surface high-priority security events.
-3. **Correlate All 3 Tables by `support_id`**:
-   - Click **Correlate & Tune** on any security event row (e.g. `support_id = 10134279319999872904`).
-   - The correlation drawer queries all 3 ClickHouse tables using `support_id` as the join key and presents them in 4 dedicated tabs:
-     - **Signature Fine-Tuning (`v4_security_events_signatures_data`)**: Lists every triggered `signature_id` with its `signature_name`, `signature_accuracy`, `signature_risk`, `blocking_mask`, matched `buffer` (`offset` / `length`), and `violation_contexts`.
-     - **Violation Data (`v4_security_events_violation_data` — 39 fields)**: Shows all correlated violation and sub-violation rows, contexts, blocking masks, and field names/values.
-     - **Full Event & HTTP Request (`v4_security_events` — 53 fields)**: Displays the raw HTTP request payload, XML `violation_details`, and a searchable 53-field inspector.
-     - **Correlated SQL Queries**: Displays the exact parameterized ClickHouse SQL queries executed for full transparency.
-4. **Tighten or Relax Signatures in Your WAF Policy (`signature_id`)**:
-   - Select the target WAF policy (automatically matched from the event's `policy_name` when present in storage).
-   - For any triggered `signature_id` (e.g. `200010468` — `"/etc/passwd" access (URI)` or `200003056` — `"/etc" execution attempt (URI)`):
-     - Click **Enable (Tighten)** to set `{"signatureId": 200010468, "enabled": true}` in `policy.signatures`.
-     - Click **Disable (Relax)** to set `{"signatureId": 200010468, "enabled": false}` in `policy.signatures` (suppressing false positives).
-     - Click **Reset** to remove the explicit override and revert to policy signature set defaults.
-   - Use **Enable All Signatures (Tighten)** or **Disable All Signatures (Relax)** for one-click bulk tuning, or click **Open Target Policy in Editor** to immediately inspect the diff, compile with `apcompile`, or commit to GitHub.
+![WAF Policy Violation Logs & Fine-Tuning](screenshots/06_policy_tuning.png)
 
+### Key Capabilities:
+- **Centralized Configuration Section**:
+  - Dedicated **Configuration** tab in the main navigation bar consolidating settings for **Redis**, **GitHub (GitOps)**, and **ClickHouse**.
+  - ClickHouse credentials (`host`, `port`, `username`, `password`, `database`, `ssl`) are persisted in Redis under `waf:policy:__clickhouse__:config` so they survive container restarts.
+- **Full-Schema Search & Filtering (`v4_security_events`)**:
+  - Global full-text search and multi-condition field filters across all **42 columns** of `v4_security_events` (including `support_id`, `policy_name`, `uri`, `ip_client`, `outcome`, `outcome_reason`, `blocking_exception_reason`, `violation_rating`, `violations`, `sub_violations`, `sig_ids`, `sig_names`, `bot_category`, and `request`).
+  - One-click quick filter presets (`Blocked Only`, `High Violation Rating`, `Signature Hits`, `Truncated Payloads`) and time-window selectors (`Last 15m`, `1h`, `6h`, `24h`, `7d`, `30d`, `All Time`).
+- **3-Table `support_id` Correlation Inspector**:
+  - Clicking **Correlate & Tune** on any security event row joins all three ClickHouse tables by `support_id` (`v4_security_events`, `v4_security_events_violation_data`, and `v4_security_events_signatures_data`) in a single view:
+    - **Signatures (`v4_security_events_signatures_data`)**: Displays every triggered `signature_id` alongside its `signature_name`, `accuracy`, `risk`, `blocking_mask`, matched `buffer` (`offset` / `length`), and current state in the selected WAF policy.
+    - **Violation Data (`v4_security_events_violation_data`)**: Lists all correlated violation and sub-violation rows, contexts, and parameter/header details.
+    - **Raw HTTP & XML**: Full HTTP request inspection, XML `violation_details`, and a searchable key-value table of all 42 `v4_security_events` fields.
+    - **SQL Queries**: Displays the exact ClickHouse SQL queries executed for full transparency.
+- **Automatic Policy Selection & Interactive Signature Tuning**:
+  - Opening the Violation Inspector automatically selects the matching WAF policy in the **Policy to Fine-Tune** dropdown based on the violation's `policy_name` field, while allowing the user to switch to any other available policy at any time, or click **Open Policy →** to jump directly to that policy in the Visual Builder.
+  - Toggle individual signatures with **Enable** (tighten) or **Disable** (relax false positives), **Reset** overrides back to policy defaults, or apply bulk actions (**Enable All**, **Disable All**).
+  - Click **Save** inside the inspector or **Save Policy to Redis** in the header bar to persist fine-tuning changes to Redis and mark the policy as **Modified (in Redis)**, ready to be committed and pushed to GitHub from the **WAF Policies** page.
