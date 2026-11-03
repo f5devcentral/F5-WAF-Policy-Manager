@@ -55,6 +55,16 @@ class Settings(BaseModel):
         default=os.getenv("CLICKHOUSE_VERIFY_SSL", "true").lower() not in ("false", "0", "no")
     )
 
+    # NGINX One Console settings (F5 Distributed Cloud / NGINX One Console App Protect security events REST API)
+    violations_source: str = Field(default=os.getenv("VIOLATIONS_SOURCE", "clickhouse"))
+    nginx_one_tenant_cname: str = Field(default=os.getenv("NGINX_ONE_TENANT_CNAME", ""))
+    nginx_one_base_url: str = Field(default=os.getenv("NGINX_ONE_BASE_URL", ""))
+    nginx_one_namespace: str = Field(default=os.getenv("NGINX_ONE_NAMESPACE", "default"))
+    nginx_one_api_token: str = Field(default=os.getenv("NGINX_ONE_API_TOKEN", ""))
+    nginx_one_verify_ssl: bool = Field(
+        default=os.getenv("NGINX_ONE_VERIFY_SSL", "true").lower() not in ("false", "0", "no")
+    )
+
 
 settings = Settings()
 

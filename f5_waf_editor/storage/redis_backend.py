@@ -67,6 +67,7 @@ class RedisPolicyStorage(PolicyStorage):
             and not self._strip_prefix(k).startswith("sig:")
             and not self._strip_prefix(k).startswith("__meta__:")
             and not self._strip_prefix(k).startswith("__clickhouse__:")
+            and not self._strip_prefix(k).startswith("__nginx_one__:")
             and not self._strip_prefix(k).startswith("__github_")
         ]
         if not policy_keys:
@@ -120,6 +121,7 @@ class RedisPolicyStorage(PolicyStorage):
             name.startswith("log:")
             or name.startswith("sig:")
             or name.startswith("__clickhouse__:")
+            or name.startswith("__nginx_one__:")
             or name.startswith("__github_")
         ):
             return None

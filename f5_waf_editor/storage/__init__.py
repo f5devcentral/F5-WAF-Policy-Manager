@@ -198,6 +198,12 @@ def init_storage(
             except Exception as ch_exc:
                 logger.debug("Could not load ClickHouse config from Redis during init_storage: %s", ch_exc)
 
+            try:
+                from .nginx_one_service import get_nginx_one_service
+                get_nginx_one_service().load_config_from_redis()
+            except Exception as n1_exc:
+                logger.debug("Could not load NGINX One Console config from Redis during init_storage: %s", n1_exc)
+
             if backend != "redis" and settings.storage_backend == "github" and is_github_configured():
                 return init_github_storage(auto_pull=False)
 

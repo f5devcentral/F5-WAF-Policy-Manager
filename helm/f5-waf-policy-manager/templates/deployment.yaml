@@ -58,6 +58,13 @@ spec:
                   name: {{ if .Values.clickhouse.existingSecret }}{{ .Values.clickhouse.existingSecret }}{{ else }}{{ include "f5-waf-policy-manager.fullname" . }}{{ end }}
                   key: {{ .Values.clickhouse.passwordKey | default "clickhouse-password" }}
             {{- end }}
+            {{- if and .Values.nginxOne (or .Values.nginxOne.apiToken .Values.nginxOne.existingSecret) }}
+            - name: NGINX_ONE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.nginxOne.existingSecret }}{{ .Values.nginxOne.existingSecret }}{{ else }}{{ include "f5-waf-policy-manager.fullname" . }}{{ end }}
+                  key: {{ .Values.nginxOne.apiTokenKey | default "nginx-one-api-token" }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
