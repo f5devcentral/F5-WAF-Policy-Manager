@@ -601,6 +601,45 @@ document.addEventListener("alpine:init", () => {
     chTuningInProgress: false,
     chError: null,
     chTestResult: null,
+    violationsSource: "clickhouse",
+    chStartTime: "",
+    chEndTime: "",
+    nginxOneTesting: false,
+    nginxOneSaving: false,
+    nginxOneModalError: "",
+    nginxOneModalSuccess: "",
+    nginxOneTestResult: null,
+    nginxOneStatus: {
+      connected: false,
+      configured: false,
+      persisted_in_redis: false,
+      tenant_cname: "",
+      base_url: "",
+      namespace: "default",
+      config: {
+        tenant_cname: "",
+        base_url: "",
+        namespace: "default",
+        verify_ssl: true,
+        has_api_token: false,
+        persisted_in_redis: false,
+      },
+    },
+    nginxOneConfig: {
+      tenant_cname: "",
+      base_url: "",
+      namespace: "default",
+      api_token: "",
+      has_api_token: false,
+      verify_ssl: true,
+    },
+    nginxOneConfigForm: {
+      tenant_cname: "",
+      base_url: "",
+      namespace: "default",
+      api_token: "",
+      verify_ssl: true,
+    },
     chStatus: {
       connected: false,
       configured: false,
@@ -688,7 +727,8 @@ document.addEventListener("alpine:init", () => {
     chSavingPolicyToRedis: false,
     chPolicySavedToRedis: false,
     chLastSavedPolicyName: "",
-    configActiveTab: "all",
+    configTab: "redis",
+    configActiveTab: "redis",
 
     // -------------------------------------------------------------
     // LIFECYCLE
@@ -731,6 +771,14 @@ document.addEventListener("alpine:init", () => {
       await this.loadCustomSignatureFiles();
       await this.loadClickHouseSchema();
       await this.loadClickHouseStatus(false);
+      await this.loadNginxOneStatus(false);
+
+      const savedViolationsSource = localStorage.getItem("f5_waf_violations_source");
+      if (savedViolationsSource === "nginx_one" || savedViolationsSource === "clickhouse") {
+        this.violationsSource = savedViolationsSource;
+      } else if (this.nginxOneStatus.configured && !this.chStatus.configured) {
+        this.violationsSource = "nginx_one";
+      }
 
       // Poll Redis health periodically
       setInterval(() => this.checkRedisHealth(false), 15000);
@@ -773,15 +821,31 @@ document.addEventListener("alpine:init", () => {
           this.chTargetPolicy = this.policies[0].name;
         }
         await this.loadClickHouseStatus(true);
-        if (this.chStatus.configured && this.chStatus.connected && this.chEvents.length === 0) {
+        await this.loadNginxOneStatus(true);
+        if (this.violationsSource === "nginx_one") {
+          if (this.nginxOneStatus.configured && this.nginxOneStatus.connected && this.chEvents.length === 0) {
+            await this.searchClickHouseEvents(true);
+          }
+        } else if (this.chStatus.configured && this.chStatus.connected && this.chEvents.length === 0) {
           await this.searchClickHouseEvents(true);
         }
       } else if (section === "configuration") {
         if (subTarget && ["github", "redis", "memory"].includes(subTarget)) {
           this.storageBackendTab = subTarget;
         }
+        if (subTarget === "redis" || subTarget === "memory") {
+          this.configTab = "redis";
+          this.configActiveTab = "redis";
+        } else if (subTarget && ["github", "clickhouse", "nginx_one"].includes(subTarget)) {
+          this.configTab = subTarget;
+          this.configActiveTab = subTarget;
+        } else if (!["redis", "github", "clickhouse", "nginx_one"].includes(this.configTab)) {
+          this.configTab = "redis";
+          this.configActiveTab = "redis";
+        }
         await this.checkStorageHealth(true);
         await this.loadClickHouseStatus(true);
+        await this.loadNginxOneStatus(true);
         const cfg = this.chConfig || this.chStatus.config || {};
         this.chConfigForm = {
           host: cfg.host || this.chConfigForm.host || "",
@@ -792,24 +856,21 @@ document.addEventListener("alpine:init", () => {
           ssl: cfg.ssl !== undefined ? !!cfg.ssl : !!this.chConfigForm.ssl,
           verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : !!this.chConfigForm.verify_ssl,
         };
-        if (subTarget) {
-          this.$nextTick(() => {
-            const cardId =
-              subTarget === "clickhouse"
-                ? "config-card-clickhouse"
-                : subTarget === "github"
-                ? "config-card-github"
-                : subTarget === "redis" || subTarget === "memory"
-                ? "config-card-redis"
-                : null;
-            if (cardId) {
-              const el = document.getElementById(cardId);
-              if (el && typeof el.scrollIntoView === "function") {
-                el.scrollIntoView({ behavior: "smooth", block: "start" });
-              }
-            }
-          });
-        }
+        const n1Cfg = this.nginxOneConfig || this.nginxOneStatus.config || {};
+        this.nginxOneConfigForm = {
+          tenant_cname: n1Cfg.tenant_cname || this.nginxOneConfigForm.tenant_cname || "",
+          base_url: n1Cfg.base_url || this.nginxOneConfigForm.base_url || "",
+          namespace: n1Cfg.namespace || this.nginxOneConfigForm.namespace || "default",
+          api_token: this.nginxOneConfigForm.api_token || "",
+          verify_ssl: n1Cfg.verify_ssl !== undefined ? !!n1Cfg.verify_ssl : !!this.nginxOneConfigForm.verify_ssl,
+        };
+      }
+    },
+
+    setConfigTab(tab) {
+      if (["redis", "github", "clickhouse", "nginx_one"].includes(tab)) {
+        this.configTab = tab;
+        this.configActiveTab = tab;
       }
     },
 
@@ -8024,7 +8085,7 @@ document.addEventListener("alpine:init", () => {
           this.chModalSuccess = `Connected to ClickHouse ${data.version || ""}. ${persistNote}`;
           this.chError = null;
           this.notify(`ClickHouse connected (${this.chConfig.host}:${this.chConfig.port})`, "success");
-          if (this.activeSection === "violations") {
+          if (this.activeSection === "violations" && this.violationsSource === "clickhouse") {
             await this.searchClickHouseEvents(true);
           }
         } else {
@@ -8035,6 +8096,228 @@ document.addEventListener("alpine:init", () => {
         this.chTestResult = { connected: false, error: e.message };
       } finally {
         this.chSaving = false;
+      }
+    },
+
+    // --- NGINX One Console Violation Logs & Tuning ---
+    async setViolationsSource(source) {
+      const normalized = source === "nginx_one" ? "nginx_one" : "clickhouse";
+      if (this.violationsSource === normalized) return;
+      this.violationsSource = normalized;
+      localStorage.setItem("f5_waf_violations_source", normalized);
+      this.chEvents = [];
+      this.chTotalEvents = 0;
+      this.chOffset = 0;
+      this.chSelectedSupportId = null;
+      this.chCorrelated = null;
+      this.chCorrelatedData = null;
+      this.chError = "";
+      this.chExecutedQuery = "";
+
+      if (normalized === "nginx_one") {
+        await this.loadNginxOneStatus(false);
+        if (this.nginxOneStatus.configured) {
+          await this.searchClickHouseEvents(true);
+        }
+      } else {
+        await this.loadClickHouseStatus(false);
+        if (this.chStatus.configured) {
+          await this.searchClickHouseEvents(true);
+        }
+      }
+    },
+
+    setNginxOneTimeRangePreset(hours = 24) {
+      const now = new Date();
+      const start = new Date(now.getTime() - hours * 3600 * 1000);
+      this.chStartTime = start.toISOString().replace(/\.\d{3}Z$/, "Z");
+      this.chEndTime = now.toISOString().replace(/\.\d{3}Z$/, "Z");
+      if (this.nginxOneStatus.configured || this.chStatus.configured) {
+        this.searchClickHouseEvents(true);
+      }
+    },
+
+    async loadNginxOneStatus(testConnection = true) {
+      try {
+        const res = await fetch(`/api/nginx-one/status?test=${testConnection ? "true" : "false"}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const cfg = data.config || {};
+        this.nginxOneStatus = {
+          configured: !!data.configured,
+          connected: !!data.connected,
+          tenant_cname: data.tenant_cname || cfg.tenant_cname || "",
+          base_url: data.base_url || cfg.base_url || "",
+          namespace: data.namespace || cfg.namespace || "default",
+          error: data.error || null,
+          persisted_in_redis: !!(data.persisted_in_redis || cfg.persisted_in_redis),
+          total_events_sample: data.total_events_sample ?? null,
+          config: {
+            tenant_cname: cfg.tenant_cname || "",
+            base_url: cfg.base_url || "",
+            namespace: cfg.namespace || "default",
+            verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : true,
+            has_api_token: !!cfg.has_api_token,
+            persisted_in_redis: !!(data.persisted_in_redis || cfg.persisted_in_redis),
+          },
+        };
+        this.nginxOneConfig = {
+          tenant_cname: cfg.tenant_cname || "",
+          base_url: cfg.base_url || "",
+          namespace: cfg.namespace || "default",
+          api_token: "",
+          has_api_token: !!cfg.has_api_token,
+          verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : true,
+        };
+        if (!this.nginxOneConfigForm.tenant_cname && !this.nginxOneConfigForm.base_url && (cfg.tenant_cname || cfg.base_url)) {
+          this.nginxOneConfigForm = {
+            tenant_cname: cfg.tenant_cname || "",
+            base_url: cfg.base_url || "",
+            namespace: cfg.namespace || "default",
+            api_token: "",
+            verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : true,
+          };
+        }
+      } catch (e) {
+        console.warn("Failed to load NGINX One Console status:", e);
+      }
+    },
+
+    async openNginxOneModal() {
+      this.nginxOneModalError = "";
+      this.nginxOneModalSuccess = "";
+      this.nginxOneTestResult = null;
+      await this.switchSection("configuration", "nginx_one");
+    },
+
+    async testNginxOneConnection() {
+      this.nginxOneTesting = true;
+      this.nginxOneModalError = "";
+      this.nginxOneModalSuccess = "";
+      this.nginxOneTestResult = null;
+      try {
+        const payload = {
+          tenant_cname: (this.nginxOneConfigForm.tenant_cname || "").trim(),
+          base_url: (this.nginxOneConfigForm.base_url || "").trim(),
+          namespace: (this.nginxOneConfigForm.namespace || "default").trim() || "default",
+          api_token: this.nginxOneConfigForm.api_token || "",
+          verify_ssl: !!this.nginxOneConfigForm.verify_ssl,
+        };
+        const res = await fetch("/api/nginx-one/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const errMsg = data.detail || "NGINX One Console connection test failed.";
+          this.nginxOneModalError = errMsg;
+          this.nginxOneTestResult = { connected: false, error: errMsg };
+          return;
+        }
+        this.nginxOneTestResult = data;
+        this.nginxOneStatus = {
+          ...this.nginxOneStatus,
+          configured: !!data.configured,
+          connected: !!data.connected,
+          tenant_cname: data.tenant_cname || payload.tenant_cname,
+          base_url: data.base_url || payload.base_url,
+          namespace: data.namespace || payload.namespace,
+          error: data.error || null,
+          total_events_sample: data.total_events_sample ?? null,
+        };
+        if (data.connected) {
+          const totalMsg =
+            data.total_events_sample !== undefined && data.total_events_sample !== null
+              ? ` (${data.total_events_sample} security event(s) available in namespace '${data.namespace || payload.namespace}')`
+              : "";
+          this.nginxOneModalSuccess = `Connected to NGINX One Console (${data.base_url || payload.tenant_cname})${totalMsg}.`;
+        } else {
+          this.nginxOneModalError = data.error || "Could not connect to NGINX One Console.";
+        }
+      } catch (e) {
+        this.nginxOneModalError = `Connection error: ${e.message}`;
+        this.nginxOneTestResult = { connected: false, error: e.message };
+      } finally {
+        this.nginxOneTesting = false;
+      }
+    },
+
+    async saveNginxOneConfig() {
+      this.nginxOneSaving = true;
+      this.nginxOneModalError = "";
+      this.nginxOneModalSuccess = "";
+      this.nginxOneTestResult = null;
+      try {
+        const payload = {
+          tenant_cname: (this.nginxOneConfigForm.tenant_cname || "").trim(),
+          base_url: (this.nginxOneConfigForm.base_url || "").trim(),
+          namespace: (this.nginxOneConfigForm.namespace || "default").trim() || "default",
+          api_token: this.nginxOneConfigForm.api_token || "",
+          verify_ssl: !!this.nginxOneConfigForm.verify_ssl,
+        };
+        const res = await fetch("/api/nginx-one/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const errMsg = data.detail || "Failed to save NGINX One Console configuration.";
+          this.nginxOneModalError = errMsg;
+          this.nginxOneTestResult = { connected: false, error: errMsg };
+          return;
+        }
+        const connInfo = data.connection || data;
+        this.nginxOneTestResult = connInfo;
+        const cfg = data.config || {};
+        this.nginxOneStatus = {
+          configured: !!data.configured,
+          connected: !!data.connected,
+          tenant_cname: data.tenant_cname || cfg.tenant_cname || payload.tenant_cname,
+          base_url: data.base_url || cfg.base_url || payload.base_url,
+          namespace: data.namespace || cfg.namespace || payload.namespace || "default",
+          error: data.error || null,
+          persisted_in_redis: !!data.persisted_in_redis,
+          total_events_sample: data.total_events_sample ?? null,
+          config: {
+            tenant_cname: cfg.tenant_cname || payload.tenant_cname,
+            base_url: cfg.base_url || payload.base_url,
+            namespace: cfg.namespace || payload.namespace || "default",
+            verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : !!payload.verify_ssl,
+            has_api_token: !!cfg.has_api_token,
+            persisted_in_redis: !!data.persisted_in_redis,
+          },
+        };
+        this.nginxOneConfig = {
+          tenant_cname: cfg.tenant_cname || payload.tenant_cname,
+          base_url: cfg.base_url || payload.base_url,
+          namespace: cfg.namespace || payload.namespace || "default",
+          api_token: "",
+          has_api_token: !!cfg.has_api_token,
+          verify_ssl: cfg.verify_ssl !== undefined ? !!cfg.verify_ssl : !!payload.verify_ssl,
+        };
+
+        const persistNote = data.persisted_in_redis
+          ? "Saved & persisted in Redis across reboots."
+          : "Saved in memory (connect Redis to persist across reboots).";
+        if (data.connected) {
+          this.nginxOneModalSuccess = `Connected to NGINX One Console (${this.nginxOneStatus.base_url}). ${persistNote}`;
+          this.chError = null;
+          this.violationsSource = "nginx_one";
+          localStorage.setItem("f5_waf_violations_source", "nginx_one");
+          this.notify(`NGINX One Console connected (${this.nginxOneStatus.namespace})`, "success");
+          if (this.activeSection === "violations") {
+            await this.searchClickHouseEvents(true);
+          }
+        } else {
+          this.nginxOneModalError = `Configuration saved (${persistNote}), but connection failed: ${data.error || "Unknown error"}`;
+        }
+      } catch (e) {
+        this.nginxOneModalError = `Failed to save config: ${e.message}`;
+        this.nginxOneTestResult = { connected: false, error: e.message };
+      } finally {
+        this.nginxOneSaving = false;
       }
     },
 
@@ -8085,6 +8368,8 @@ document.addEventListener("alpine:init", () => {
 
     resetChFilters() {
       this.chGlobalSearch = "";
+      this.chStartTime = "";
+      this.chEndTime = "";
       this.chQuickFilters = {
         support_id: "",
         policy_name: "",
@@ -8098,7 +8383,11 @@ document.addEventListener("alpine:init", () => {
       };
       this.chFieldFilters = [];
       this.chOffset = 0;
-      if (this.chStatus.configured) {
+      const isConfigured =
+        this.violationsSource === "nginx_one"
+          ? this.nginxOneStatus.configured
+          : this.chStatus.configured;
+      if (isConfigured) {
         this.searchClickHouseEvents(true);
       }
     },
@@ -8208,16 +8497,27 @@ document.addEventListener("alpine:init", () => {
           sort_by: this.chSortBy || "timestamp",
           sort_order: sortDirection,
           sort_dir: sortDirection,
+          start_time: (this.chStartTime || "").trim() || null,
+          end_time: (this.chEndTime || "").trim() || null,
         };
 
-        const res = await fetch("/api/clickhouse/events/search", {
+        const searchEndpoint =
+          this.violationsSource === "nginx_one"
+            ? "/api/nginx-one/events/search"
+            : "/api/clickhouse/events/search";
+
+        const res = await fetch(searchEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok) {
-          this.chError = data.detail || "Failed to query ClickHouse security events.";
+          this.chError =
+            data.detail ||
+            (this.violationsSource === "nginx_one"
+              ? "Failed to query NGINX One Console security events."
+              : "Failed to query ClickHouse security events.");
           this.chEvents = [];
           this.chTotalEvents = 0;
           return;
@@ -8225,7 +8525,11 @@ document.addEventListener("alpine:init", () => {
         this.chEvents = data.rows || data.events || [];
         this.chTotalEvents = data.total || 0;
         this.chExecutedQuery = data.query || "";
-        this.chStatus.connected = true;
+        if (this.violationsSource === "nginx_one") {
+          this.nginxOneStatus.connected = true;
+        } else {
+          this.chStatus.connected = true;
+        }
 
         // If previously correlated support_id is no longer in the filtered results, clear or correlate first row
         if (this.chEvents.length === 0) {
@@ -8243,7 +8547,8 @@ document.addEventListener("alpine:init", () => {
           }
         }
       } catch (e) {
-        this.chError = `Error querying ClickHouse: ${e.message}`;
+        const srcName = this.violationsSource === "nginx_one" ? "NGINX One Console" : "ClickHouse";
+        this.chError = `Error querying ${srcName}: ${e.message}`;
       } finally {
         this.chLoading = false;
       }
@@ -8310,9 +8615,11 @@ document.addEventListener("alpine:init", () => {
         const qs = this.chTargetPolicy
           ? `?policy_name=${encodeURIComponent(this.chTargetPolicy)}`
           : "";
-        const res = await fetch(
-          `/api/clickhouse/events/${encodeURIComponent(cleanId)}/correlate${qs}`
-        );
+        const correlateUrl =
+          this.violationsSource === "nginx_one"
+            ? `/api/nginx-one/events/${encodeURIComponent(cleanId)}/correlate${qs}`
+            : `/api/clickhouse/events/${encodeURIComponent(cleanId)}/correlate${qs}`;
+        const res = await fetch(correlateUrl);
         const data = await res.json();
         if (!res.ok) {
           this.notify(data.detail || `Failed to correlate support_id ${cleanId}`, "error");
@@ -8418,9 +8725,11 @@ document.addEventListener("alpine:init", () => {
         return;
       }
       try {
-        const res = await fetch(
-          `/api/clickhouse/policy/${encodeURIComponent(this.chTargetPolicy)}/signature-states?signature_ids=${encodeURIComponent(sigIds.join(","))}`
-        );
+        const statesUrl =
+          this.violationsSource === "nginx_one"
+            ? `/api/nginx-one/policy/${encodeURIComponent(this.chTargetPolicy)}/signature-states?signature_ids=${encodeURIComponent(sigIds.join(","))}`
+            : `/api/clickhouse/policy/${encodeURIComponent(this.chTargetPolicy)}/signature-states?signature_ids=${encodeURIComponent(sigIds.join(","))}`;
+        const res = await fetch(statesUrl);
         if (!res.ok) {
           this.chSignatureStates = {};
           return;
@@ -8471,7 +8780,11 @@ document.addEventListener("alpine:init", () => {
           signature_name: sigName || null,
           support_id: this.chSelectedSupportId || null,
         };
-        const res = await fetch("/api/clickhouse/policy/tune-signature", {
+        const tuneEndpoint =
+          this.violationsSource === "nginx_one"
+            ? "/api/nginx-one/policy/tune-signature"
+            : "/api/clickhouse/policy/tune-signature";
+        const res = await fetch(tuneEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -8533,7 +8846,11 @@ document.addEventListener("alpine:init", () => {
             signature_name: s.signature_name || null,
           })),
         };
-        const res = await fetch("/api/clickhouse/policy/tune-signatures-bulk", {
+        const bulkTuneEndpoint =
+          this.violationsSource === "nginx_one"
+            ? "/api/nginx-one/policy/tune-signatures-bulk"
+            : "/api/clickhouse/policy/tune-signatures-bulk";
+        const res = await fetch(bulkTuneEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -8626,7 +8943,11 @@ document.addEventListener("alpine:init", () => {
           signatures: signaturesPayload.length > 0 ? signaturesPayload : null,
         };
 
-        const res = await fetch("/api/clickhouse/policy/save-to-redis", {
+        const saveEndpoint =
+          this.violationsSource === "nginx_one"
+            ? "/api/nginx-one/policy/save-to-redis"
+            : "/api/clickhouse/policy/save-to-redis";
+        const res = await fetch(saveEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

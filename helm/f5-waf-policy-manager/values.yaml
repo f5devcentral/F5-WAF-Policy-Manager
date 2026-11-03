@@ -192,4 +192,18 @@ clickhouse:
   ssl: false
   verifySsl: false
 
+# -----------------------------------------------------------------------------
+# NGINX One Console Configuration (SaaS WAF Security Events & Policy Tuning)
+# -----------------------------------------------------------------------------
+nginxOne:
+  violationsSource: "clickhouse"
+  tenantCname: ""
+  baseUrl: ""
+  namespace: "default"
+  apiToken: ""
+  existingSecret: ""
+  apiTokenKey: "nginx-one-api-token"
+  verifySsl: true
+
+
 

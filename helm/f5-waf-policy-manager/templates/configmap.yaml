@@ -30,6 +30,13 @@ data:
   CLICKHOUSE_SSL: {{ .Values.clickhouse.ssl | default false | quote }}
   CLICKHOUSE_VERIFY_SSL: {{ .Values.clickhouse.verifySsl | default false | quote }}
   {{- end }}
+  {{- if .Values.nginxOne }}
+  VIOLATIONS_SOURCE: {{ .Values.nginxOne.violationsSource | default "clickhouse" | quote }}
+  NGINX_ONE_TENANT_CNAME: {{ .Values.nginxOne.tenantCname | default "" | quote }}
+  NGINX_ONE_BASE_URL: {{ .Values.nginxOne.baseUrl | default "" | quote }}
+  NGINX_ONE_NAMESPACE: {{ .Values.nginxOne.namespace | default "default" | quote }}
+  NGINX_ONE_VERIFY_SSL: {{ if hasKey .Values.nginxOne "verifySsl" }}{{ .Values.nginxOne.verifySsl | quote }}{{ else }}"true"{{ end }}
+  {{- end }}
 
 
 

@@ -1,6 +1,6 @@
 # F5 WAF for NGINX Policy & Logging Manager — Visual Walkthrough
 
-Welcome to the visual walkthrough of **F5 WAF for NGINX Policy & Logging Profile Manager**. This guide showcases the core features, visual builders, compiler diagnostics, and GitOps workflows through real-world interface screenshots.
+Welcome to the visual walkthrough of **F5 WAF for NGINX Policy & Logging Profile Manager**. This guide showcases the core features, visual builders, compiler diagnostics, GitOps workflows, dual-source security event correlation (**ClickHouse** & **NGINX One Console**), and system configuration through real-world interface screenshots.
 
 ---
 
@@ -11,6 +11,8 @@ Welcome to the visual walkthrough of **F5 WAF for NGINX Policy & Logging Profile
 4. [Official Policy Compilation & Bundle Verification (`apcompile`)](#4-official-policy-compilation--bundle-verification-apcompile)
 5. [GitOps Synchronization, Conflict Resolution & Verbose Commits](#5-gitops-synchronization-conflict-resolution--verbose-commits)
 6. [ClickHouse Security Log Violations & WAF Policy Fine-Tuning](#6-clickhouse-security-log-violations--waf-policy-fine-tuning)
+7. [NGINX One Console Security Events & WAF Policy Fine-Tuning](#7-nginx-one-console-security-events--waf-policy-fine-tuning)
+8. [System Configuration & Vertical Tabs Integration Management](#8-system-configuration--vertical-tabs-integration-management)
 
 ---
 
@@ -29,7 +31,7 @@ The central landing page provides a single-pane-of-glass overview of all managed
   - **Transparent Monitor**: Zero-risk auditing mode for staging and shadow traffic testing.
   - **gRPC Microservices Protection**: Strict Protobuf IDL schema validation and malformed frame blocking.
 - **Inventory Table with GitOps State**:
-  - Live **`● synced`** and **`● draft`** status badges indicating alignment with remote GitHub repositories.
+  - Live **`● Synced`** and **`● Draft`** status badges indicating alignment with remote GitHub repositories.
   - Quick action controls: Edit in Visual Builder, Duplicate, CodeMirror JSON export, Direct GitHub commit, `.tgz` bundle download, and Safe Delete.
   - Fast client-side search by policy name, description, or enforcement mode.
 
@@ -124,24 +126,63 @@ Adopt true Infrastructure-as-Code (IaC) and DevSecOps workflows by keeping your 
 
 ## 6. ClickHouse Security Log Violations & WAF Policy Fine-Tuning
 
-The **Violation Logs & Tuning** dashboard connects directly to the remote **ClickHouse** database inside **NGINX Instance Manager (NIM)** to search security violations, correlate event tables by `support_id`, and fine-tune WAF policies (`signature_id` tightening or relaxation).
+The **Violation Logs & Tuning** dashboard supports dual security telemetry backends. When **ClickHouse (NIM)** is selected, it connects directly to the remote **ClickHouse** database inside **NGINX Instance Manager (NIM)** to search security violations, correlate event tables by `support_id`, and fine-tune WAF policies (`signature_id` tightening or relaxation).
 
-![WAF Policy Violation Logs & Fine-Tuning](screenshots/06_policy_tuning.png)
+![WAF Policy Violation Logs & Fine-Tuning (ClickHouse)](screenshots/06_policy_tuning.png)
 
 ### Key Capabilities:
-- **Centralized Configuration Section**:
-  - Dedicated **Configuration** tab in the main navigation bar consolidating settings for **Redis**, **GitHub (GitOps)**, and **ClickHouse**.
+- **Dual Telemetry Source Switcher**:
+  - Toggle seamlessly between **ClickHouse (NIM)** and **NGINX One Console** directly from the top header bar or inside the Violation Browser card.
   - ClickHouse credentials (`host`, `port`, `username`, `password`, `database`, `ssl`) are persisted in Redis under `waf:policy:__clickhouse__:config` so they survive container restarts.
 - **Full-Schema Search & Filtering (`v4_security_events`)**:
-  - Global full-text search and multi-condition field filters across all **42 columns** of `v4_security_events` (including `support_id`, `policy_name`, `uri`, `ip_client`, `outcome`, `outcome_reason`, `blocking_exception_reason`, `violation_rating`, `violations`, `sub_violations`, `sig_ids`, `sig_names`, `bot_category`, and `request`).
-  - One-click quick filter presets (`Blocked Only`, `High Violation Rating`, `Signature Hits`, `Truncated Payloads`) and time-window selectors (`Last 15m`, `1h`, `6h`, `24h`, `7d`, `30d`, `All Time`).
+  - Global full-text search and multi-condition field filters across all **53 columns** of `v4_security_events` (including `support_id`, `policy_name`, `http__uri`, `http__remote_addr`, `outcome`, `outcome_reason`, `blocking_exception_reason`, `violation_rating`, `violations`, `sub_violations`, `signature_ids`, `signature_names`, `bot_category`, and `request`).
+  - Quick filter inputs for `support_id`, `policy_name`, `request_status`, `severity`, `http__request_method`, `http__uri`, `http__remote_addr`, `signature_ids`, and `violations`.
 - **3-Table `support_id` Correlation Inspector**:
   - Clicking **Correlate & Tune** on any security event row joins all three ClickHouse tables by `support_id` (`v4_security_events`, `v4_security_events_violation_data`, and `v4_security_events_signatures_data`) in a single view:
-    - **Signatures (`v4_security_events_signatures_data`)**: Displays every triggered `signature_id` alongside its `signature_name`, `accuracy`, `risk`, `blocking_mask`, matched `buffer` (`offset` / `length`), and current state in the selected WAF policy.
-    - **Violation Data (`v4_security_events_violation_data`)**: Lists all correlated violation and sub-violation rows, contexts, and parameter/header details.
-    - **Raw HTTP & XML**: Full HTTP request inspection, XML `violation_details`, and a searchable key-value table of all 42 `v4_security_events` fields.
-    - **SQL Queries**: Displays the exact ClickHouse SQL queries executed for full transparency.
+    - **1. `v4_security_events_signatures_data` & Policy Tuning**: Displays every triggered `signature_id` alongside its `signature_name`, `accuracy`, `risk`, `blocking_mask`, matched `buffer` (`offset` / `length`), `violation_contexts`, `field_names`, and current state in the selected WAF policy.
+    - **2. `v4_security_events_violation_data`**: Lists all correlated violation and sub-violation rows, contexts, and parameter/header details.
+    - **3. `v4_security_events` (All 53 Fields & Raw HTTP Request)**: Full HTTP request inspection, XML `violation_details`, and a searchable key-value table of all `v4_security_events` fields.
 - **Automatic Policy Selection & Interactive Signature Tuning**:
   - Opening the Violation Inspector automatically selects the matching WAF policy in the **Policy to Fine-Tune** dropdown based on the violation's `policy_name` field, while allowing the user to switch to any other available policy at any time, or click **Open Policy →** to jump directly to that policy in the Visual Builder.
   - Toggle individual signatures with **Enable** (tighten) or **Disable** (relax false positives), **Reset** overrides back to policy defaults, or apply bulk actions (**Enable All**, **Disable All**).
   - Click **Save** inside the inspector or **Save Policy to Redis** in the header bar to persist fine-tuning changes to Redis and mark the policy as **Modified (in Redis)**, ready to be committed and pushed to GitHub from the **WAF Policies** page.
+
+---
+
+## 7. NGINX One Console Security Events & WAF Policy Fine-Tuning
+
+For cloud-connected NGINX App Protect deployments managed through **F5 Distributed Cloud / NGINX One Console**, the **Violation Logs & Tuning** dashboard integrates natively with the official **NGINX One Console REST API** (`listSecurityEvents` and `getSecurityEvent`)—eliminating the need for a direct ClickHouse database connection.
+
+![NGINX One Console Security Events & WAF Policy Fine-Tuning](screenshots/07_nginx_one_policy_tuning.png)
+
+### Key Capabilities:
+- **Official NGINX One Console REST API Integration**:
+  - Queries **`listSecurityEvents`** (`GET /api/nginx/one/namespaces/{namespace}/app-protect/events`) with ISO-8601 `start_time` / `end_time` time-window filters (`Last 1h`, `Last 24h`, `Last 7d`, or custom timestamps) and field-level filtering.
+  - Inspects individual events via **`getSecurityEvent`** (`GET /api/nginx/one/namespaces/{namespace}/app-protect/events/{id}`) by `support_id`.
+- **Normalized 3-Table Correlation View**:
+  - Automatically normalizes nested NGINX One Console `violations[]`, `violations[].signatures[]`, and `subviolations[]` payloads into the same unified 3-tab correlation inspector used for ClickHouse:
+    - **Signatures & Policy Tuning**: Inspects each matched `signature_id`, `signature_name`, `accuracy`, `risk`, `blocking_mask`, `buffer` (`offset` / `length`), and parameter context (`field_names`).
+    - **Violation Contexts**: Correlates violation names, contexts (`parameter`, `header`, `cookie`, `request`), and violation ratings.
+    - **Full Event & Raw Request**: Displays full HTTP request payloads and event metadata (`system_id`, `instance_group`, `outcome`, `outcome_reason`, `bot_category`, `client_class`).
+- **One-Click Signature Tightening & False-Positive Relaxation**:
+  - Matches the security event's `policy_name` to your managed WAF policies and displays live policy override states (`● ENABLED IN POLICY`, `● DISABLED IN POLICY`, or `DEFAULT (SIGNATURE SET)`).
+  - Enable or disable individual `signature_id` rules or bulk-tune all signatures triggered by a `support_id`, then save directly to Redis for GitOps commit and push.
+
+---
+
+## 8. System Configuration & Vertical Tabs Integration Management
+
+The **Configuration** section provides a clean, unified interface with a **left vertical tabs sidebar** and a **dedicated main configuration panel on the right** to manage all external integrations and runtime storage settings.
+
+![System Configuration Vertical Tabs](screenshots/08_configuration_vertical_tabs.png)
+
+### Key Capabilities:
+- **Left Vertical Navigation Sidebar with Live Health Dots**:
+  - **Redis & Storage Mode**: Switch between **GitHub + Redis Cache**, **Redis Key-Value Only**, or **In-Memory Fallback**, and inspect live Redis host/port latency.
+  - **GitHub Settings**: Configure the GitOps repository (`owner`, `repo`, `branch`), Personal Access Token (`GITHUB_TOKEN`), and test repository connectivity.
+  - **ClickHouse**: Configure NGINX Instance Manager ClickHouse connection parameters (`host`, `port`, `username`, `password`, `database`, `ssl`, `verify_ssl`), test connectivity, and clear saved credentials.
+  - **NGINX One Console**: Configure **Tenant CNAME** (auto-resolving to `https://<tenant>.console.ves.volterra.io`) or a custom Console Base URL, **Namespace**, **API Token** (`Authorization: APIToken <token>`), and TLS verification.
+- **Persistent Redis-Backed Configuration**:
+  - All integration settings are persisted in Redis (`waf:policy:__github__:config`, `waf:policy:__clickhouse__:config`, and `waf:policy:__nginx_one__:config`) so configurations survive container restarts without requiring environment variable changes.
+- **Top Integration Status Summary Pills**:
+  - Always-visible status badges in the header card summarize active connections across **Storage**, **GitHub**, **ClickHouse**, and **NGINX One Console** at a glance.

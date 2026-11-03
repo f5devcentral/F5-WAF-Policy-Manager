@@ -114,8 +114,8 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
           Violation Logs &amp; Tuning
           <span class="w-2 h-2 rounded-full"
-                :class="chStatus.connected && chStatus.configured ? 'bg-emerald-400 animate-pulse' : (chStatus.configured ? 'bg-rose-400' : 'bg-slate-400')"
-                :title="chStatus.connected && chStatus.configured ? 'ClickHouse Connected' : 'ClickHouse Not Connected'"></span>
+                :class="violationsSource === 'nginx_one' ? (nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-400 animate-pulse' : (nginxOneStatus.configured ? 'bg-rose-400' : 'bg-slate-400')) : (chStatus.connected && chStatus.configured ? 'bg-emerald-400 animate-pulse' : (chStatus.configured ? 'bg-rose-400' : 'bg-slate-400'))"
+                :title="violationsSource === 'nginx_one' ? (nginxOneStatus.connected && nginxOneStatus.configured ? 'NGINX One Console Connected' : 'NGINX One Console Not Connected') : (chStatus.connected && chStatus.configured ? 'ClickHouse Connected' : 'ClickHouse Not Connected')"></span>
         </button>
 
         <button @click="switchSection('configuration')"
@@ -265,15 +265,38 @@
         </div>
       </template>
 
-      <!-- ClickHouse Violation Logs Actions for Header -->
+      <!-- ClickHouse & NGINX One Console Violation Logs Actions for Header -->
       <template x-if="activeSection === 'violations'">
         <div class="flex items-center gap-2">
-          <button @click="openClickHouseModal()"
+          <div class="inline-flex items-center rounded-lg bg-slate-200/80 dark:bg-slate-800/80 p-0.5 border border-slate-300 dark:border-slate-700 text-[11px] font-semibold">
+            <button @click="setViolationsSource('clickhouse')"
+                    class="px-2.5 py-1 rounded-md transition"
+                    :class="violationsSource !== 'nginx_one' ? 'bg-amber-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
+                    title="Use ClickHouse (NGINX Instance Manager)">
+              ClickHouse (NIM)
+            </button>
+            <button @click="setViolationsSource('nginx_one')"
+                    class="px-2.5 py-1 rounded-md transition"
+                    :class="violationsSource === 'nginx_one' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'"
+                    title="Use NGINX One Console REST API (listSecurityEvents / getSecurityEvent)">
+              NGINX One Console
+            </button>
+          </div>
+          <button x-show="violationsSource !== 'nginx_one'"
+                  @click="openClickHouseModal()"
                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition"
                   :class="chStatus.connected && chStatus.configured ? 'bg-amber-100 dark:bg-amber-950/40 border-amber-400 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 hover:bg-amber-200' : 'bg-rose-100 dark:bg-rose-950/40 border-rose-400 dark:border-rose-500/40 text-rose-800 dark:text-rose-300 hover:bg-rose-200'"
                   title="Configure ClickHouse Connection (NGINX Instance Manager)">
             <span class="w-2 h-2 rounded-full" :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
             <span x-text="chStatus.configured ? ('ClickHouse: ' + (chStatus.config?.host || '') + ':' + (chStatus.config?.port || 8123)) : 'Configure ClickHouse'"></span>
+          </button>
+          <button x-show="violationsSource === 'nginx_one'"
+                  @click="openNginxOneModal()"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono transition"
+                  :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-100 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200' : 'bg-rose-100 dark:bg-rose-950/40 border-rose-400 dark:border-rose-500/40 text-rose-800 dark:text-rose-300 hover:bg-rose-200'"
+                  title="Configure NGINX One Console REST API Connection">
+            <span class="w-2 h-2 rounded-full" :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'"></span>
+            <span x-text="nginxOneStatus.configured ? ('NGINX One: ' + (nginxOneStatus.config?.tenant_cname || nginxOneStatus.namespace || 'default')) : 'Configure NGINX One'"></span>
           </button>
           <button @click="searchClickHouseEvents(true)"
                   :disabled="chLoading"
@@ -5309,23 +5332,44 @@
           <div>
             <div class="flex flex-wrap items-center gap-2">
               <h2 class="text-base font-bold text-slate-900 dark:text-white">WAF Violation Browser &amp; Policy Signature Tightening</h2>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              <!-- Source Switcher: ClickHouse (NIM) vs NGINX One Console -->
+              <div class="inline-flex items-center rounded-lg bg-slate-200/80 dark:bg-slate-800 p-0.5 border border-slate-300 dark:border-slate-700 text-[10px] font-bold">
+                <button @click="setViolationsSource('clickhouse')"
+                        class="px-2 py-0.5 rounded-md transition"
+                        :class="violationsSource !== 'nginx_one' ? 'bg-amber-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'">
+                  ClickHouse (NIM)
+                </button>
+                <button @click="setViolationsSource('nginx_one')"
+                        class="px-2 py-0.5 rounded-md transition"
+                        :class="violationsSource === 'nginx_one' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'">
+                  NGINX One Console
+                </button>
+              </div>
+              <span x-show="violationsSource !== 'nginx_one'"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
                     :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'"
                     x-text="chStatus.connected && chStatus.configured ? ('ClickHouse Connected (' + (chStatus.database || chStatus.config?.database || 'nms') + ')') : (chStatus.configured ? 'Connection Error' : 'Not Configured')"></span>
-              <template x-if="chStatus.persisted_in_redis || chStatus.config?.persisted_in_redis">
+              <span x-show="violationsSource === 'nginx_one'"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                    :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'"
+                    x-text="nginxOneStatus.connected && nginxOneStatus.configured ? ('NGINX One Connected (' + (nginxOneStatus.namespace || nginxOneStatus.config?.namespace || 'default') + ')') : (nginxOneStatus.configured ? 'Connection Error' : 'Not Configured')"></span>
+              <template x-if="(violationsSource !== 'nginx_one' && (chStatus.persisted_in_redis || chStatus.config?.persisted_in_redis)) || (violationsSource === 'nginx_one' && (nginxOneStatus.persisted_in_redis || nginxOneStatus.config?.persisted_in_redis))">
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30"
-                      title="ClickHouse connection credentials are persisted in Redis (__clickhouse__:config) across reboots">
+                      title="Connection credentials are persisted in Redis across reboots">
                   Persisted in Redis
                 </span>
               </template>
             </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p x-show="violationsSource !== 'nginx_one'" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Search across all <span class="font-semibold text-slate-700 dark:text-slate-200" x-text="chSchemaEventsColumns.length || 53">53</span> fields in <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events</code>, correlate <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events_violation_data</code> &amp; <code class="font-mono text-amber-600 dark:text-amber-400">v4_security_events_signatures_data</code> by <code class="font-mono font-bold text-emerald-600 dark:text-emerald-400">support_id</code>, and enable/disable <code class="font-mono font-bold text-purple-600 dark:text-purple-400">signature_id</code> in your WAF policy.
+            </p>
+            <p x-show="violationsSource === 'nginx_one'" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Query NGINX One Console via <code class="font-mono text-emerald-600 dark:text-emerald-400">listSecurityEvents</code> (<code class="font-mono">/api/nginx/one/namespaces/{namespace}/app-protect/events</code>), inspect &amp; correlate event violations and matched signatures via <code class="font-mono text-emerald-600 dark:text-emerald-400">getSecurityEvent</code> by <code class="font-mono font-bold text-emerald-600 dark:text-emerald-400">support_id</code>, and fine-tune <code class="font-mono font-bold text-purple-600 dark:text-purple-400">signature_id</code> in your WAF policy.
             </p>
           </div>
         </div>
 
-        <!-- Target WAF Policy Selector, Save Policy to Redis & ClickHouse Config Button -->
+        <!-- Target WAF Policy Selector, Save Policy to Redis & Settings Buttons -->
         <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
           <div class="flex flex-wrap items-center gap-2 bg-slate-100 dark:bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-800">
             <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">Target Policy:</label>
@@ -5357,16 +5401,24 @@
             </template>
           </div>
 
-          <button @click="openClickHouseModal()"
+          <button x-show="violationsSource !== 'nginx_one'"
+                  @click="openClickHouseModal()"
                   class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 transition">
             <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             ClickHouse Settings
+          </button>
+
+          <button x-show="violationsSource === 'nginx_one'"
+                  @click="openNginxOneModal()"
+                  class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 transition">
+            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            NGINX One Settings
           </button>
         </div>
       </div>
 
       <!-- Connection Alert Banner if ClickHouse is not configured or unreachable -->
-      <template x-if="!chStatus.configured || chError">
+      <template x-if="violationsSource !== 'nginx_one' && (!chStatus.configured || chError)">
         <div class="rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
              :class="!chStatus.configured ? 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'">
           <div class="flex items-start gap-3">
@@ -5379,6 +5431,24 @@
           <button @click="openClickHouseModal()"
                   class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow transition shrink-0">
             Configure ClickHouse
+          </button>
+        </div>
+      </template>
+
+      <!-- Connection Alert Banner if NGINX One Console is not configured or unreachable -->
+      <template x-if="violationsSource === 'nginx_one' && (!nginxOneStatus.configured || chError)">
+        <div class="rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+             :class="!nginxOneStatus.configured ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300'">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <div class="text-xs">
+              <div class="font-bold" x-text="!nginxOneStatus.configured ? 'NGINX One Console Connection Not Configured' : 'NGINX One Console API Notice'"></div>
+              <div class="mt-0.5 opacity-90" x-text="chError || 'Configure your NGINX One Console Tenant CNAME, Namespace, and API Token to query security events via listSecurityEvents and getSecurityEvent REST APIs. Credentials are persisted in Redis across reboots.'"></div>
+            </div>
+          </div>
+          <button @click="openNginxOneModal()"
+                  class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition shrink-0">
+            Configure NGINX One Console
           </button>
         </div>
       </template>
@@ -5517,6 +5587,38 @@
                    @keydown.enter="searchClickHouseEvents(true)"
                    placeholder="e.g. Attack signature"
                    class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+
+        <!-- Optional Time Range Filter Row (start_time / end_time for NGINX One Console listSecurityEvents & ClickHouse) -->
+        <div x-show="violationsSource === 'nginx_one'" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800/80">
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-emerald-600 dark:text-emerald-400 mb-1">start_time (ISO-8601 / RFC3339)</label>
+            <input type="text" x-model="chStartTime"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="Default: 24h ago (e.g. 2026-01-01T00:00:00Z)"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-mono uppercase text-emerald-600 dark:text-emerald-400 mb-1">end_time (ISO-8601 / RFC3339)</label>
+            <input type="text" x-model="chEndTime"
+                   @keydown.enter="searchClickHouseEvents(true)"
+                   placeholder="Default: now (e.g. 2026-01-02T00:00:00Z)"
+                   class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+          </div>
+          <div class="flex items-end gap-1.5">
+            <button @click="setNginxOneTimeRangePreset(1)" type="button"
+                    class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/20 border border-slate-300 dark:border-slate-700 text-[11px] font-mono text-slate-700 dark:text-slate-300 transition">
+              Last 1h
+            </button>
+            <button @click="setNginxOneTimeRangePreset(24)" type="button"
+                    class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/20 border border-slate-300 dark:border-slate-700 text-[11px] font-mono text-slate-700 dark:text-slate-300 transition">
+              Last 24h
+            </button>
+            <button @click="setNginxOneTimeRangePreset(168)" type="button"
+                    class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/20 border border-slate-300 dark:border-slate-700 text-[11px] font-mono text-slate-700 dark:text-slate-300 transition">
+              Last 7d
+            </button>
           </div>
         </div>
 
@@ -6120,44 +6222,158 @@
           <div>
             <h2 class="text-lg font-bold text-slate-900 dark:text-white">System Configuration &amp; Integrations</h2>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Manage connection settings for <strong>Redis</strong> (policy key-value store &amp; persistent settings), <strong>GitHub</strong> (GitOps repository synchronization), and <strong>ClickHouse</strong> (NGINX Instance Manager WAF violation logs).
+              Manage connection settings for <strong>Redis</strong> (policy key-value store &amp; persistent settings), <strong>GitHub</strong> (GitOps repository synchronization), <strong>ClickHouse</strong> (NGINX Instance Manager WAF violation logs), and <strong>NGINX One Console</strong> (REST API WAF security events).
             </p>
           </div>
         </div>
 
         <!-- Status Summary Pills -->
         <div class="flex flex-wrap items-center gap-2.5">
-          <div class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2"
+          <button type="button" @click="setConfigTab('redis')"
+               class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2 transition cursor-pointer"
                :class="storageHealth.connected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : (storageHealth.backend === 'in_memory' ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300')">
             <span class="w-2 h-2 rounded-full"
                   :class="storageHealth.connected ? 'bg-emerald-500 animate-pulse' : (storageHealth.backend === 'in_memory' ? 'bg-amber-500' : 'bg-rose-500')"></span>
             <span>Storage:</span>
             <strong class="uppercase" x-text="storageHealth.backend === 'github' ? 'GitHub' : (storageHealth.backend === 'redis' ? 'Redis' : 'In-Memory')"></strong>
-          </div>
+          </button>
 
-          <div class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2"
+          <button type="button" @click="setConfigTab('github')"
+               class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2 transition cursor-pointer"
                :class="(storageHealth.github_configured || storageHealth.github?.connected) ? 'bg-slate-200/80 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'">
             <span class="w-2 h-2 rounded-full" :class="(storageHealth.github_configured || storageHealth.github?.connected) ? 'bg-emerald-500' : 'bg-slate-400'"></span>
             <span>GitHub:</span>
             <strong x-text="(storageHealth.github_configured || storageHealth.github?.connected) ? ((storageHealth.github?.owner || githubForm.owner) + '/' + (storageHealth.github?.repo || githubForm.repo)) : 'Not Configured'"></strong>
-          </div>
+          </button>
 
-          <div class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2"
+          <button type="button" @click="setConfigTab('clickhouse')"
+               class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2 transition cursor-pointer"
                :class="chStatus.connected && chStatus.configured ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'">
             <span class="w-2 h-2 rounded-full" :class="chStatus.connected && chStatus.configured ? 'bg-emerald-500 animate-pulse' : (chStatus.configured ? 'bg-rose-500' : 'bg-slate-400')"></span>
             <span>ClickHouse:</span>
             <strong x-text="chStatus.configured ? ((chStatus.config?.host || '') + ':' + (chStatus.config?.port || 8123)) : 'Not Configured'"></strong>
-          </div>
+          </button>
+
+          <button type="button" @click="setConfigTab('nginx_one')"
+               class="px-3 py-1.5 rounded-xl border text-xs font-mono flex items-center gap-2 transition cursor-pointer"
+               :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'">
+            <span class="w-2 h-2 rounded-full" :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-500 animate-pulse' : (nginxOneStatus.configured ? 'bg-rose-500' : 'bg-slate-400')"></span>
+            <span>NGINX One:</span>
+            <strong x-text="nginxOneStatus.configured ? ((nginxOneStatus.config?.tenant_cname || 'custom') + ' (' + (nginxOneStatus.namespace || 'default') + ')') : 'Not Configured'"></strong>
+          </button>
         </div>
       </div>
 
-      <!-- 3-Column Configuration Grid: Redis, GitHub, ClickHouse -->
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+      <!-- Configuration 2-Column Layout: Left Vertical Tabs + Right Main Content -->
+      <div class="flex flex-col md:flex-row gap-6 items-start">
+
+        <!-- Left-Hand Vertical Tabs Navigation Sidebar -->
+        <aside id="config-categories-sidebar" class="w-full md:w-72 lg:w-80 shrink-0 glass-panel p-3 rounded-2xl flex flex-col gap-1.5 border border-slate-200 dark:border-slate-800 shadow-xl">
+          <div class="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 mb-1">
+            <span>Configuration</span>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-500">4</span>
+          </div>
+
+          <!-- Vertical Tab 1: Redis & Storage Mode -->
+          <button type="button"
+                  id="config-tab-redis"
+                  @click="setConfigTab('redis')"
+                  :class="configTab === 'redis' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-medium'"
+                  class="w-full text-left px-3.5 py-3 rounded-xl text-xs flex items-center justify-between transition-all group">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                   :class="configTab === 'redis' ? 'bg-white/20 text-white' : 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="truncate">Redis &amp; Storage Mode</div>
+                <div class="text-[10px] truncate font-normal"
+                     :class="configTab === 'redis' ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-500'">Key-value store &amp; fallback</div>
+              </div>
+            </div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ml-2"
+                  :class="storageHealth.backend === 'redis' && storageHealth.connected ? (configTab === 'redis' ? 'bg-white' : 'bg-emerald-500') : (storageHealth.backend === 'in_memory' ? 'bg-amber-400' : 'bg-slate-400')"></span>
+          </button>
+
+          <!-- Vertical Tab 2: GitHub Settings -->
+          <button type="button"
+                  id="config-tab-github"
+                  @click="setConfigTab('github')"
+                  :class="configTab === 'github' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-md font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-medium'"
+                  class="w-full text-left px-3.5 py-3 rounded-xl text-xs flex items-center justify-between transition-all group">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                   :class="configTab === 'github' ? 'bg-white/20 dark:bg-slate-900/15 text-white dark:text-slate-950' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="truncate">GitHub Settings</div>
+                <div class="text-[10px] truncate font-normal"
+                     :class="configTab === 'github' ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'">GitOps repository sync</div>
+              </div>
+            </div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ml-2"
+                  :class="(storageHealth.github_configured || storageHealth.github?.connected) ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+          </button>
+
+          <!-- Vertical Tab 3: ClickHouse -->
+          <button type="button"
+                  id="config-tab-clickhouse"
+                  @click="setConfigTab('clickhouse')"
+                  :class="configTab === 'clickhouse' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-medium'"
+                  class="w-full text-left px-3.5 py-3 rounded-xl text-xs flex items-center justify-between transition-all group">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                   :class="configTab === 'clickhouse' ? 'bg-white/20 text-white' : 'bg-amber-500/15 text-amber-500 border border-amber-500/30'">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="truncate">ClickHouse</div>
+                <div class="text-[10px] truncate font-normal"
+                     :class="configTab === 'clickhouse' ? 'text-amber-100' : 'text-slate-400 dark:text-slate-500'">NGINX Instance Manager logs</div>
+              </div>
+            </div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ml-2"
+                  :class="chStatus.connected && chStatus.configured ? 'bg-emerald-400' : (chStatus.configured ? 'bg-rose-500' : 'bg-slate-400')"></span>
+          </button>
+
+          <!-- Vertical Tab 4: NGINX One Console -->
+          <button type="button"
+                  id="config-tab-nginx-one"
+                  @click="setConfigTab('nginx_one')"
+                  :class="configTab === 'nginx_one' ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-medium'"
+                  class="w-full text-left px-3.5 py-3 rounded-xl text-xs flex items-center justify-between transition-all group">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                   :class="configTab === 'nginx_one' ? 'bg-white/20 text-white' : 'bg-teal-500/15 text-teal-500 border border-teal-500/30'">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="truncate">NGINX One Console</div>
+                <div class="text-[10px] truncate font-normal"
+                     :class="configTab === 'nginx_one' ? 'text-teal-100' : 'text-slate-400 dark:text-slate-500'">REST API security events</div>
+              </div>
+            </div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ml-2"
+                  :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-400' : (nginxOneStatus.configured ? 'bg-rose-500' : 'bg-slate-400')"></span>
+          </button>
+        </aside>
+
+        <!-- Right-Hand Main Configuration Panel -->
+        <div id="config-main-panel" class="flex-1 min-w-0 w-full">
 
         <!-- =============================================================== -->
         <!-- CARD 1: REDIS & LOCAL STORAGE CONFIGURATION                     -->
         <!-- =============================================================== -->
-        <div id="config-card-redis" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+        <div id="config-card-redis" x-show="configTab === 'redis'" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
           <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
@@ -6223,7 +6439,7 @@
         <!-- =============================================================== -->
         <!-- CARD 2: GITHUB (GITOPS) REPOSITORY CONFIGURATION                -->
         <!-- =============================================================== -->
-        <div id="config-card-github" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+        <div id="config-card-github" x-show="configTab === 'github'" style="display: none;" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
           <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center shadow-md">
@@ -6359,7 +6575,7 @@
         <!-- =============================================================== -->
         <!-- CARD 3: CLICKHOUSE DATABASE CONFIGURATION (NIM)                 -->
         <!-- =============================================================== -->
-        <div id="config-card-clickhouse" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+        <div id="config-card-clickhouse" x-show="configTab === 'clickhouse'" style="display: none;" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
           <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500">
@@ -6453,6 +6669,92 @@
           </div>
         </div>
 
+        <!-- =============================================================== -->
+        <!-- CARD 4: NGINX ONE CONSOLE CONFIGURATION (REST API)              -->
+        <!-- =============================================================== -->
+        <div id="config-card-nginx-one" x-show="configTab === 'nginx_one'" style="display: none;" class="glass-panel rounded-2xl border p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">NGINX One Console Settings</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">REST API Security Events Storage (listSecurityEvents &amp; getSecurityEvent)</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase"
+                  :class="nginxOneStatus.connected && nginxOneStatus.configured ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : (nginxOneStatus.configured ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400')"
+                  x-text="nginxOneStatus.connected && nginxOneStatus.configured ? ('Connected (' + (nginxOneStatus.namespace || 'default') + ')') : (nginxOneStatus.configured ? 'Configured' : 'Not Configured')"></span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Tenant CNAME *</label>
+              <input type="text" x-model="nginxOneConfigForm.tenant_cname" placeholder="e.g. my-tenant (for my-tenant.console.ves.volterra.io)"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Namespace *</label>
+              <input type="text" x-model="nginxOneConfigForm.namespace" placeholder="default"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              API Token * (<code class="font-mono">Authorization: APIToken &lt;token&gt;</code>)
+              <span x-show="nginxOneStatus.config?.has_api_token" class="text-[10px] font-normal text-emerald-500">(saved in Redis)</span>
+            </label>
+            <input type="password" x-model="nginxOneConfigForm.api_token" placeholder="Leave blank to keep saved API token"
+                   class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Console Base URL (Optional)</label>
+              <input type="text" x-model="nginxOneConfigForm.base_url" placeholder="https://{tenant_cname}.console.ves.volterra.io"
+                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <div class="flex flex-col gap-2 pt-4">
+              <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input type="checkbox" x-model="nginxOneConfigForm.verify_ssl" class="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500">
+                <span>Verify TLS Certificate</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400 space-y-1">
+            <div><strong class="text-emerald-600 dark:text-emerald-400">listSecurityEvents:</strong> <code>GET /api/nginx/one/namespaces/{namespace}/app-protect/events</code></div>
+            <div><strong class="text-emerald-600 dark:text-emerald-400">getSecurityEvent:</strong> <code>GET /api/nginx/one/namespaces/{namespace}/app-protect/events/{id}</code></div>
+          </div>
+
+          <!-- NGINX One Connection Test / Save Result Banner -->
+          <template x-if="nginxOneTestResult || nginxOneModalError || nginxOneModalSuccess">
+            <div class="p-3 rounded-xl border text-xs font-mono"
+                 :class="(nginxOneTestResult?.connected || nginxOneModalSuccess) && !nginxOneModalError ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'">
+              <div class="font-bold"
+                   x-text="nginxOneModalError ? ('Connection Failed: ' + nginxOneModalError) : (nginxOneModalSuccess || (nginxOneTestResult?.connected ? ('Connected to NGINX One Console (' + (nginxOneTestResult.namespace || 'default') + ')') : ('Connection Failed: ' + (nginxOneTestResult?.error || 'Unknown error'))))"></div>
+            </div>
+          </template>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <button @click="testNginxOneConnection()"
+                    :disabled="nginxOneTesting || (!nginxOneConfigForm.tenant_cname && !nginxOneConfigForm.base_url)"
+                    class="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition disabled:opacity-40">
+              <span x-text="nginxOneTesting ? 'Testing...' : 'Test Connection'"></span>
+            </button>
+            <button @click="saveNginxOneConfig()"
+                    :disabled="nginxOneSaving || (!nginxOneConfigForm.tenant_cname && !nginxOneConfigForm.base_url)"
+                    class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition disabled:opacity-40">
+              <span x-text="nginxOneSaving ? 'Saving to Redis...' : 'Save &amp; Use NGINX One'"></span>
+            </button>
+          </div>
+        </div>
+
+        </div>
       </div>
 
     </main>

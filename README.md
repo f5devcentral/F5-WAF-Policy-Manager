@@ -9,9 +9,9 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm%20Chart-326CE5?logo=kubernetes&logoColor=white)](helm/f5-waf-policy-manager)
 
-A modern, declarative DevSecOps web interface and REST management engine for **F5 WAF for NGINX** security policies, logging profiles, user-defined custom signatures (Snort syntax), and **ClickHouse Violation Log Analysis & Policy Fine-Tuning**.
+A modern, declarative DevSecOps web interface and REST management engine for **F5 WAF for NGINX** security policies, logging profiles, user-defined custom signatures (Snort syntax), and **WAF Violation Log Analysis & Policy Fine-Tuning** across both **ClickHouse (NGINX Instance Manager)** and **NGINX One Console**.
 
-Backed by a high-performance **Redis** key-value store with automatic in-memory fallback, an integrated **F5 WAF Compiler (`apcompile`)** service to validate and test binary policy bundle compilation, and direct integration with **NGINX Instance Manager (NIM) ClickHouse** security event tables to correlate violations by `support_id` and tighten or relax `signature_id` rules in WAF policies.
+Backed by a high-performance **Redis** key-value store with automatic in-memory fallback, an integrated **F5 WAF Compiler (`apcompile`)** service to validate and test binary policy bundle compilation, and direct integration with **NGINX Instance Manager (NIM) ClickHouse** security event tables or **NGINX One Console REST API (`listSecurityEvents` & `getSecurityEvent`)** to correlate violations by `support_id` and tighten or relax `signature_id` rules in WAF policies.
 
 <p align="center">
   <img src="docs/screenshots/01_waf_policies_dashboard.png" alt="F5 WAF for NGINX Policy Manager Dashboard" width="100%">
@@ -24,7 +24,7 @@ Backed by a high-performance **Redis** key-value store with automatic in-memory 
 
 ## 📸 Visual Walkthrough & Interface Tour
 
-The interface provides an end-to-end declarative DevSecOps workflow from policy design to binary compilation and GitOps version control:
+The interface provides an end-to-end declarative DevSecOps workflow from policy design to binary compilation, violation log correlation, and GitOps version control:
 
 | View | Preview | Highlights |
 | :--- | :--- | :--- |
@@ -33,7 +33,9 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 | **Logging Profiles** | [![Logging Profiles](docs/screenshots/03_logging_profiles_dashboard.png)](docs/walkthrough.md#3-logging-profiles-management--siem-formats) | Fleet-wide logging configuration with built-in presets for Splunk, ArcSight CEF, gRPC, and custom key-value formats. |
 | **Compiler Tester (`apcompile`)** | [![Compiler Tester](docs/screenshots/04_compiler_tester_modal.png)](docs/walkthrough.md#4-official-policy-compilation--bundle-verification-apcompile) | Real-time bundle validation and binary `.tgz` generation running the official F5 WAF compiler engine with diagnostic logging. |
 | **GitOps Version Control** | [![GitOps Commit](docs/screenshots/05_github_commit_push_modal.png)](docs/walkthrough.md#5-gitops-synchronization-conflict-resolution--verbose-commits) | Direct GitHub push with automated diff change summarization, conflict resolution on pull, and branch management. |
-| **ClickHouse Violation Logs & Tuning** | [![Violations Tuning](docs/screenshots/06_policy_tuning.png)](docs/walkthrough.md#6-clickhouse-security-log-violations--waf-policy-fine-tuning) | Search across all 53 columns of `v4_security_events`, correlate 3 NIM ClickHouse tables by `support_id`, and enable/disable `signature_id` in policies. |
+| **ClickHouse (NIM) Violation Logs & Tuning** | [![ClickHouse Violations Tuning](docs/screenshots/06_policy_tuning.png)](docs/walkthrough.md#6-clickhouse-security-log-violations--waf-policy-fine-tuning) | Search across all 53 columns of `v4_security_events`, correlate 3 NIM ClickHouse tables by `support_id`, and enable/disable `signature_id` in policies. |
+| **NGINX One Console Security Events & Tuning** | [![NGINX One Console Policy Tuning](docs/screenshots/07_nginx_one_policy_tuning.png)](docs/walkthrough.md#7-nginx-one-console-security-events--waf-policy-fine-tuning) | Query NGINX One Console via `listSecurityEvents` & `getSecurityEvent` REST APIs, correlate violations and signatures by `support_id`, and fine-tune WAF policies in one click. |
+| **System Configuration (Vertical Tabs)** | [![System Configuration Vertical Tabs](docs/screenshots/08_configuration_vertical_tabs.png)](docs/walkthrough.md#8-system-configuration--vertical-tabs-integration-management) | Configure **Redis & Storage Mode**, **GitHub Settings**, **ClickHouse**, and **NGINX One Console** from a clean vertical-tabbed navigation sidebar and main configuration panel. |
 
 👉 **[Read the Full Visual Walkthrough Guide with Detailed Step-by-Step Instructions →](docs/walkthrough.md)**
 
@@ -44,7 +46,22 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 ### 🖥️ Modern DevSecOps Web Interface
 - **Theme Switcher**: Instant switching between an eye-friendly Light theme and a dark cybersecurity theme with persistent `localStorage` preference and synchronized CodeMirror syntax styling.
 - **Unified Navigation**: Switch seamlessly across **WAF Policies**, **Logging Profiles**, **Custom Signatures**, **Violation Logs & Tuning**, **Configuration**, and **Compiler Diagnostics** dashboards.
-- **Dedicated Configuration Section**: Centralized page to manage and test **Redis & Storage Mode**, **GitHub GitOps Settings**, and **ClickHouse Database Settings** in one place.
+- **Refactored Vertical-Tabbed Configuration Section**: Dedicated **Configuration** page featuring a **left vertical tabs sidebar** (**Redis & Storage Mode**, **GitHub Settings**, **ClickHouse**, and **NGINX One Console**) and a **right main configuration panel** to manage, test, and persist all integrations in one place.
+
+---
+
+### ☁️ NGINX One Console Security Events & WAF Policy Fine-Tuning
+- **Official NGINX One Console REST API Integration**:
+  - Connects directly to the **NGINX One Console** REST API endpoints when NGINX One Console is used as the storage and telemetry backend for WAF security violations:
+    - [`listSecurityEvents`](https://docs.nginx.com/nginx-one-console/api/api-reference-guide/#operation/listSecurityEvents) (`GET /api/nginx/one/namespaces/{namespace}/security/events`) — Queries, filters, and paginates WAF security events by time window (`start_time`, `end_time`), policy name, request outcome, HTTP URI, client IP, and violation/signature fields.
+    - [`getSecurityEvent`](https://docs.nginx.com/nginx-one-console/api/api-reference-guide/#operation/getSecurityEvent) (`GET /api/nginx/one/namespaces/{namespace}/security/events/{event_id}`) — Fetches the complete single-event payload by `support_id` (`event_id`), including nested `violations[]`, `violations[].signatures[]`, `subviolations[]`, and raw HTTP request details.
+- **Configurable & Persistent NGINX One Console Settings**:
+  - Configure `base_url` (default `https://console.nginx.f5.com`), `namespace`, `api_token` (`Bearer` / `APIToken` authentication), `verify_ssl`, and `timeout` from **Configuration → NGINX One Console** or via environment variables (`NGINX_ONE_*`).
+  - Settings are **persisted in Redis** (`waf:policy:__nginx_one__:config`) across restarts and container reboots.
+- **Correlated Violation & Signature Inspector (`support_id`)**:
+  - Automatically normalizes nested NGINX One Console `getSecurityEvent` payloads into three correlated inspector tabs (**1. Signatures & Policy Tuning**, **2. Violations & Subviolations**, and **3. Security Event Summary & Raw HTTP Request**) and auto-selects the matching WAF policy (`policy_name`).
+- **One-Click & Bulk Signature Fine-Tuning (`signature_id`)**:
+  - **Enable (`enabled: true`)** to tighten a policy, **Disable (`enabled: false`)** to relax false positives, or **Reset to Default** to remove explicit signature overrides in `policy.signatures[]`, with direct persistence to Redis (`waf:policy:<name>`) and GitHub GitOps.
 
 ---
 
@@ -119,28 +136,30 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 ┌────────────────────────────────────────────────────────────────────────┐
 │                   Browser Client (Light / Dark UI)                     │
 │   ├── WAF Security Policies (Visual Builder / CodeMirror / Diff)       │
-│   ├── Violation Logs & Tuning (53-Field Search & 3-Table Correlation)  │
-│   ├── User Custom Signatures (Snort Rule Builder & Payload Tester)     │
+│   ├── Violation Logs & Tuning (ClickHouse NIM & NGINX One Console)     │
+│   ├── System Configuration    (Vertical Tabs: Redis/GitHub/CH/N1)      │
+│   ├── User Custom Signatures  (Snort Rule Builder & Payload Tester)    │
 │   ├── IP Lists / Evasions / Signature Sets / URLs / Parameters         │
-│   └── Logging Profiles     (Visual Builder / SIEM Presets / Tokens)   │
+│   └── Logging Profiles        (Visual Builder / SIEM Presets / Tokens) │
 └───────────────────┬────────────────────────────────────┬───────────────┘
                     │ REST API                           │ Compilation Check
 ┌───────────────────▼────────────────────┐   ┌───────────▼───────────────┐
 │     F5 WAF Policy Manager (FastAPI)    │   │  f5-waf-apcompile Service │
 │  ├── Policy & Custom Sig Validators    │   │  ├── apcompile CLI        │
 │  ├── ClickHouse Violation Correlator   │   │  ├── Attack Signatures    │
-│  ├── Signature Fine-Tuning Engine      │   │  ├── Bot Signatures       │
-│  ├── GitOps Synchronization Engine     │   │  └── Threat Campaigns     │
-│  └── Storage Abstraction Layer         │   └───────────────────────────┘
-└─────┬─────────────────────┬────────────┘
-      │                     │ ClickHouse HTTP SQL (support_id correlation)
-      │                     ▼
-      │         ┌────────────────────────────────────────────────────────┐
-      │         │    ClickHouse DB (NGINX Instance Manager / NMS)        │
-      │         │  • v4_security_events                 (53 columns)     │
-      │         │  • v4_security_events_violation_data  (39 columns)     │
-      │         │  • v4_security_events_signatures_data (42 columns)     │
-      │         └────────────────────────────────────────────────────────┘
+│  ├── NGINX One Console API Correlator  │   │  ├── Bot Signatures       │
+│  ├── Signature Fine-Tuning Engine      │   │  └── Threat Campaigns     │
+│  ├── GitOps Synchronization Engine     │   └───────────────────────────┘
+│  └── Storage Abstraction Layer         │
+└─────┬──────────────┬───────────────────┴──┐
+      │              │ ClickHouse HTTP SQL  │ NGINX One Console REST API
+      │              ▼                      ▼
+      │  ┌────────────────────────────┐  ┌──────────────────────────────────┐
+      │  │ ClickHouse DB (NIM / NMS)  │  │     NGINX One Console Cloud      │
+      │  │ • v4_security_events (53)  │  │ • listSecurityEvents REST API    │
+      │  │ • ..._violation_data (39)  │  │ • getSecurityEvent REST API      │
+      │  │ • ..._signatures_data (42) │  │ • Violations & Signatures (JSON) │
+      │  └────────────────────────────┘  └──────────────────────────────────┘
       │
       ├─────────────────────────────────────────┐
       │ Working Copy & Config Persistence       │ GitOps Sync (Commit / Pull)
@@ -149,8 +168,8 @@ The interface provides an end-to-end declarative DevSecOps workflow from policy 
 │       Redis Store         │             │       GitHub Repository       │
 │ • Active editing working  │             │ • Remote source-of-truth      │
 │   copy (policies & logs)  │  Startup    │ • Version-controlled JSON:    │
-│ • Persists ClickHouse DB  │  Auto-Pull  │   ├── /policies/*.json        │
-│   config across reboots   │ ◄────────── │   ├── /log-profiles/*.json    │
+│ • Persists ClickHouse &   │  Auto-Pull  │   ├── /policies/*.json        │
+│   NGINX One configs       │ ◄────────── │   ├── /log-profiles/*.json    │
 │ • Resilient In-Memory     │  Explicit   │   └── /custom-signatures/*.json
 │   fallback if unavailable │  Commit     │                               │
 │                           │ ──────────► │ • Branch & commit history     │
@@ -264,7 +283,7 @@ env:
 ```
 
 #### 4. Runtime Configuration via Web Interface
-You can also view and configure **Redis**, **GitHub GitOps**, and **ClickHouse** connections directly in the web browser by navigating to the **Configuration** tab in the top navigation bar (or clicking the **Storage Health** badge in the header). Configuration entered in the UI updates the running application immediately, and ClickHouse settings are persisted in Redis across restarts. To ensure your GitHub and Redis credentials survive container recreation, save them in `.env`.
+You can also view and configure **Redis & Storage Mode**, **GitHub Settings**, **ClickHouse**, and **NGINX One Console** connections directly in the web browser by navigating to the **Configuration** tab in the top navigation bar. The Configuration page uses a **vertical tabs sidebar** on the left so you can switch cleanly between each integration panel on the right. Configuration entered in the UI updates the running application immediately, and both ClickHouse (`waf:policy:__clickhouse__:config`) and NGINX One Console (`waf:policy:__nginx_one__:config`) settings are persisted in Redis across restarts. To ensure your GitHub and Redis credentials survive container recreation, save them in `.env`.
 
 ---
 
@@ -315,6 +334,59 @@ ClickHouse connection settings (`host`, `port`, `username`, `password`, `databas
 | `CLICKHOUSE_DATABASE` | No | `nms` | ClickHouse database containing the `v4_security_events*` tables (falls back to `default` automatically if `nms` is not present). |
 | `CLICKHOUSE_SSL` | No | `false` | Use HTTPS (`true`) or HTTP (`false`) when querying ClickHouse. |
 | `CLICKHOUSE_VERIFY_SSL` | No | `false` | Verify TLS certificates when `CLICKHOUSE_SSL=true`. |
+
+---
+
+## ☁️ NGINX One Console Security Events & WAF Policy Fine-Tuning
+
+In addition to ClickHouse (NGINX Instance Manager), F5 WAF Policy Manager supports **NGINX One Console** as a cloud storage and telemetry backend for WAF security violations. You can switch between **ClickHouse (NIM)** and **NGINX One Console** at any time from the **Violation Logs & Tuning** header bar.
+
+### 🔗 NGINX One Console REST API Endpoints (`support_id`)
+
+Instead of querying a local ClickHouse database, `NginxOneConsoleService` communicates with the official NGINX One Console REST API endpoints:
+
+| Operation | HTTP Method & Path | Role in Violation Analysis & Policy Tuning |
+|---|---|---|
+| [`listSecurityEvents`](https://docs.nginx.com/nginx-one-console/api/api-reference-guide/#operation/listSecurityEvents) | `GET /api/nginx/one/namespaces/{namespace}/security/events` | Lists and filters WAF security violation events across a time window (`start_time`, `end_time`), with pagination (`limit`, `offset`) and multi-field filtering (`support_id`, `policy_name`, `request_status`, `severity`, `http__request_method`, `http__uri`, `http__remote_addr`, `signature_ids`, `violations`). |
+| [`getSecurityEvent`](https://docs.nginx.com/nginx-one-console/api/api-reference-guide/#operation/getSecurityEvent) | `GET /api/nginx/one/namespaces/{namespace}/security/events/{event_id}` | Retrieves the full security event detail by `support_id` (`event_id`), including nested `violations[]`, `violations[].signatures[]`, `subviolations[]`, and raw HTTP request payloads, and correlates each triggered `signature_id` against the target WAF policy (`policy.signatures[]`). |
+
+### 💾 Persistent NGINX One Console Configuration (Redis + Environment Variables)
+
+NGINX One Console connection settings (`base_url`, `namespace`, `api_token`, `verify_ssl`, `timeout`) can be configured at runtime via **Configuration → NGINX One Console** in the Web UI or via `POST /api/nginx-one/config`.
+- When saved, the configuration is **automatically persisted in Redis** under the reserved key `waf:policy:__nginx_one__:config` and reloaded on startup.
+- You can also pre-populate defaults via `.env`, `docker-compose.yml`, or Helm (`values.yaml`):
+
+| Environment Variable | Required | Default | Description |
+|---|---|---|---|
+| `NGINX_ONE_BASE_URL` | No | `https://console.nginx.f5.com` | Base URL for the NGINX One Console REST API. |
+| `NGINX_ONE_NAMESPACE` | No | `default` | Target NGINX One Console namespace containing your NGINX WAF instances. |
+| `NGINX_ONE_API_TOKEN` | No | `""` | NGINX One Console API token (`Bearer` / `APIToken` authentication). |
+| `NGINX_ONE_VERIFY_SSL` | No | `true` | Verify TLS certificates when connecting to NGINX One Console (`true` / `false`). |
+| `NGINX_ONE_TIMEOUT` | No | `15` | HTTP request timeout in seconds for NGINX One Console API queries. |
+
+---
+
+## ☁️ NGINX One Console Security Events & WAF Policy Fine-Tuning
+
+When **NGINX One Console** is used as storage for WAF security violations instead of NGINX Instance Manager ClickHouse, F5 WAF Policy Manager connects directly to the official NGINX One Console REST API endpoints:
+- [`listSecurityEvents`](https://docs.nginx.com/nginx-one-console/api/api-reference-guide/#operation/listSecurityEvents): `GET https://{tenant_cname}.console.ves.volterra.io/api/nginx/one/namespaces/{namespace}/app-protect/events`
+- [`getSecurityEvent`](https://docs.nginx.com/nginx-one-console/api/api-reference-guide/#operation/getSecurityEvent): `GET https://{tenant_cname}.console.ves.volterra.io/api/nginx/one/namespaces/{namespace}/app-protect/events/{id}`
+
+### 🔄 Switching Between ClickHouse (NIM) and NGINX One Console
+- Use the **Source Selector** (`ClickHouse (NIM)` / `NGINX One Console`) in the top header or in the **Violation Logs & Tuning** toolbar to switch violation log backends at any time.
+- Selecting any security event invokes `getSecurityEvent` for its `support_id`, extracts all triggered `violations[]` (`sub_violations[]`, `signatures[]` with `id`, `name`, `accuracy`, `risk`, `blocking_mask`, `buffer`, `offset`, `length`), automatically matches the event's `policy_name` to your managed WAF policies, and lets you **Enable (Enforce)**, **Disable (Relax)**, or **Reset** individual or bulk `signature_id` overrides and persist the fine-tuned policy to Redis.
+
+### 💾 Persistent NGINX One Console Configuration (Redis + Environment Variables)
+NGINX One Console connection settings (`tenant_cname`, `base_url`, `namespace`, `api_token`, `verify_ssl`) can be configured at runtime via **Configuration → NGINX One Console Settings** or `PUT /api/nginx-one/config`, and are persisted in Redis under `waf:policy:__nginx_one__:config`.
+
+| Environment Variable | Required | Default | Description |
+|---|---|---|---|
+| `VIOLATIONS_SOURCE` | No | `clickhouse` | Default violation logs source (`clickhouse` or `nginx_one`). |
+| `NGINX_ONE_TENANT_CNAME` | No | `""` | NGINX One Console tenant CNAME (`https://{tenant_cname}.console.ves.volterra.io`). |
+| `NGINX_ONE_BASE_URL` | No | `""` | Optional full base URL override for NGINX One Console. |
+| `NGINX_ONE_NAMESPACE` | No | `default` | NGINX One Console namespace containing your NGINX App Protect instances. |
+| `NGINX_ONE_API_TOKEN` | No | `""` | API token (`Authorization: APIToken <token>`). |
+| `NGINX_ONE_VERIFY_SSL` | No | `true` | Verify TLS certificates when calling NGINX One Console REST APIs. |
 
 ---
 
@@ -497,7 +569,7 @@ kubectl --namespace waf-system port-forward svc/f5-waf-editor 8000:80
 
 ## 🗄️ Redis Data Model
 
-Policies, logging profiles, custom signatures, and ClickHouse connection settings are cleanly isolated by key naming conventions:
+Policies, logging profiles, custom signatures, and ClickHouse / NGINX One Console connection settings are cleanly isolated by key naming conventions:
 
 | Resource Type | Redis Key Pattern | Document Schema | Example Key |
 |---|---|---|---|
@@ -505,6 +577,7 @@ Policies, logging profiles, custom signatures, and ClickHouse connection setting
 | **Logging Profile** | `waf:policy:log:<profile_name>` | JSON conforming to F5 Logging Schema | `waf:policy:log:log_splunk` |
 | **Custom Signatures** | `waf:policy:sig:<tag_name>` | JSON conforming to F5 Custom Signatures Schema | `waf:policy:sig:corp_custom_rules` |
 | **ClickHouse Config** | `waf:policy:__clickhouse__:config` | Persistent ClickHouse connection JSON (`host`, `port`, `username`, `password`, `database`, `ssl`, `verify_ssl`) | `waf:policy:__clickhouse__:config` |
+| **NGINX One Config** | `waf:policy:__nginx_one__:config` | Persistent NGINX One Console connection JSON (`base_url`, `namespace`, `api_token`, `verify_ssl`, `timeout`) | `waf:policy:__nginx_one__:config` |
 
 ---
 
@@ -540,6 +613,19 @@ Interactive OpenAPI documentation is available at [http://localhost:8000/docs](h
 | `GET` | `/api/clickhouse/policy/{policy_name}/signature-states` | Inspect whether specific `signature_id` values are enabled, disabled, or default in a WAF policy |
 | `POST` | `/api/clickhouse/policy/tune-signature` | Enable, disable, or reset a `signature_id` in a WAF policy (`policy.signatures`) |
 | `POST` | `/api/clickhouse/policy/tune-signatures-bulk` | Bulk enable, disable, or reset multiple `signature_id` values in a WAF policy |
+| `GET` | `/api/nginx-one/schema` | Return NGINX One Console `listSecurityEvents` & `getSecurityEvent` field schema metadata |
+| `GET` | `/api/nginx-one/status` | Check NGINX One Console connection status and namespace health |
+| `GET` | `/api/nginx-one/config` | Retrieve current NGINX One Console configuration (with masked API token) |
+| `POST` | `/api/nginx-one/config` | Save NGINX One Console settings (`base_url`, `namespace`, `api_token`, `verify_ssl`, `timeout`) to Redis |
+| `POST` | `/api/nginx-one/test` | Test NGINX One Console connectivity via `listSecurityEvents` (`limit=1`) |
+| `POST` | `/api/nginx-one/events/search` | Search and filter security events via NGINX One Console `listSecurityEvents` REST API |
+| `GET` | `/api/nginx-one/events/{support_id}` | Fetch a single security event via NGINX One Console `getSecurityEvent` REST API |
+| `GET` | `/api/nginx-one/events/{support_id}/correlate` | Fetch and correlate event, violations, and triggered `signature_id` states by `support_id` |
+| `POST` | `/api/nginx-one/events/correlate-batch` | Batch-correlate multiple `support_id` events via NGINX One Console |
+| `GET` | `/api/nginx-one/policy/{policy_name}/signature-states` | Inspect `signature_id` override states in a WAF policy for NGINX One Console tuning |
+| `POST` | `/api/nginx-one/policy/tune-signature` | Enable, disable, or reset a single `signature_id` in a WAF policy from an NGINX One event |
+| `POST` | `/api/nginx-one/policy/tune-signatures-bulk` | Bulk enable, disable, or reset multiple `signature_id` values from an NGINX One event |
+| `POST` | `/api/nginx-one/policy/save-to-redis` | Explicitly persist a fine-tuned WAF policy to Redis (`waf:policy:<name>`) |
 | `POST` | `/api/policies/{name}/github-push` | *(GitOps)* Commit and push policy from Redis to GitHub |
 | `POST` | `/api/log-profiles/{name}/github-push` | *(GitOps)* Commit and push logging profile from Redis to GitHub |
 | `POST` | `/api/custom-signatures/{tag}/github-push` | *(GitOps)* Commit and push custom signatures from Redis to GitHub |
@@ -555,7 +641,7 @@ Interactive OpenAPI documentation is available at [http://localhost:8000/docs](h
 
 ## 🧪 Testing
 
-The test suite validates schema enforcement, ClickHouse 53-field search & 3-table correlation, signature fine-tuning, Snort syntax parsing, IP list formats, evasion rules, storage layers, and REST endpoints:
+The test suite validates schema enforcement, ClickHouse 53-field search & 3-table correlation, NGINX One Console `listSecurityEvents` & `getSecurityEvent` integration, signature fine-tuning, Snort syntax parsing, IP list formats, evasion rules, storage layers, and REST endpoints:
 
 ```bash
 # Run pytest with uv
@@ -564,29 +650,30 @@ uv run pytest tests/ -v
 
 ```text
 ============================= test session starts =============================
-collected 193 items
+collected 203 items
 
-tests/test_api.py ........................................               [ 20%]
-tests/test_clickhouse_tuning.py .....                                    [ 23%]
-tests/test_compiler.py .......                                           [ 26%]
-tests/test_converter.py ......                                           [ 30%]
-tests/test_custom_signatures_api.py .......                              [ 33%]
-tests/test_custom_signatures_compiler.py ......                          [ 36%]
-tests/test_custom_signatures_storage.py ..                               [ 37%]
-tests/test_custom_signatures_validator.py .......                        [ 41%]
-tests/test_deployments.py ........                                       [ 45%]
-tests/test_diff_summary.py ......                                        [ 48%]
-tests/test_github_storage.py ...........                                 [ 54%]
-tests/test_logging_api.py ......                                         [ 57%]
-tests/test_logging_storage.py ..                                         [ 58%]
-tests/test_logging_validator.py .........                                [ 63%]
-tests/test_snort_validator.py ....                                       [ 65%]
-tests/test_storage.py ....                                               [ 67%]
-tests/test_templates.py ..                                               [ 68%]
-tests/test_url_parameters_and_sanitization.py ............               [ 74%]
+tests/test_api.py ........................................               [ 19%]
+tests/test_clickhouse_tuning.py .....                                    [ 22%]
+tests/test_compiler.py .......                                           [ 25%]
+tests/test_converter.py ......                                           [ 28%]
+tests/test_custom_signatures_api.py .......                              [ 32%]
+tests/test_custom_signatures_compiler.py ......                          [ 34%]
+tests/test_custom_signatures_storage.py ..                               [ 35%]
+tests/test_custom_signatures_validator.py .......                        [ 39%]
+tests/test_deployments.py ........                                       [ 43%]
+tests/test_diff_summary.py ......                                        [ 46%]
+tests/test_github_storage.py ...........                                 [ 51%]
+tests/test_logging_api.py ......                                         [ 54%]
+tests/test_logging_storage.py ..                                         [ 55%]
+tests/test_logging_validator.py .........                                [ 60%]
+tests/test_nginx_one_tuning.py ..........                                [ 65%]
+tests/test_snort_validator.py ....                                       [ 67%]
+tests/test_storage.py ....                                               [ 68%]
+tests/test_templates.py ..                                               [ 69%]
+tests/test_url_parameters_and_sanitization.py ............               [ 75%]
 tests/test_validator.py ................................................ [100%]
 
-====================== 193 passed, 4 warnings in 12.40s =======================
+====================== 203 passed, 4 warnings in 12.85s =======================
 ```
 
 ---
